@@ -10,9 +10,7 @@ Current version: `0.1`.
 
 Download files from the latest GitHub Release:
 
-```text
-https://github.com/sethdill/rewrap_markdown/releases/latest
-```
+<https://github.com/sethdill/rewrap_markdown/releases/latest>
 
 Do not use GitHub's green **Code** button unless you want the source code.
 Regular BBEdit users probably want one of the release downloads instead.
@@ -21,12 +19,13 @@ Regular BBEdit users probably want one of the release downloads instead.
 
 This is the faster version. Download the binary for your Mac:
 
-- Apple Silicon: `rewrap-markdown-0.1-macos-arm64`
-- Intel: `rewrap-markdown-0.1-macos-x86_64`
+- Apple Silicon:
+  [rewrap-markdown-0.1-macos-arm64](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/rewrap-markdown-0.1-macos-arm64)
+- Intel: [rewrap-markdown-0.1-macos-x86_64](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/rewrap-markdown-0.1-macos-x86_64)
 
 Also download:
 
-- `Rewrap-Markdown-Swift`
+- [Rewrap-Markdown-Swift](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/Rewrap-Markdown-Swift)
 
 If the files are in your Downloads folder, install them with these commands.
 For Apple Silicon:
@@ -67,7 +66,7 @@ Python 3.9.
 
 Download:
 
-- `rewrap-markdown-0.1.py`
+- [rewrap-markdown-0.1.py](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/rewrap-markdown-0.1.py)
 
 If the file is in your Downloads folder:
 
