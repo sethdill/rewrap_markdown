@@ -45,7 +45,7 @@ current machine architecture. The GitHub Actions release workflow builds both:
 The workflow also uploads:
 
 - `rewrap-markdown-VERSION.py`
-- `Rewrap Markdown (Swift)`
+- `Rewrap-Markdown-Swift`
 
 The Python file can be installed directly as a BBEdit text filter. The Swift
 BBEdit wrapper should be installed alongside a downloaded Swift binary or
