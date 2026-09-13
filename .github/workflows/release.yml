@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, such as v0.1"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-26-intel
+          - arch: arm64
+            runner: macos-26
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Run compatibility tests against release binary
+        run: REWRAP_MARKDOWN_EXECUTABLE="$PWD/.build/release/rewrap-markdown" swift test
+
+      - name: Stage binary
+        run: |
+          version=$(cat VERSION)
+          mkdir -p artifact
+          cp .build/release/rewrap-markdown "artifact/rewrap-markdown-${version}-macos-${{ matrix.arch }}"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: rewrap-markdown-macos-${{ matrix.arch }}
+          path: artifact/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v6
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Add script assets
+        run: |
+          version=$(cat VERSION)
+          cp Reference/rewrap_markdown.py "dist/rewrap-markdown-${version}.py"
+          cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "dist/Rewrap Markdown (Swift)"
+          chmod +x dist/*
+
+      - name: Publish assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.tag || github.ref_name }}
+        run: |
+          title="Rewrap Markdown ${TAG_NAME#v}"
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" dist/* --clobber
+          else
+            gh release create "$TAG_NAME" dist/* --verify-tag --title "$title" --generate-notes
+          fi

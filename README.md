@@ -32,6 +32,9 @@ make install
 `make dist` creates release artifacts in `dist/`: a macOS binary, the standalone
 Python filter, and a drop-in BBEdit wrapper for the Swift binary.
 
+GitHub Releases build and attach separate macOS binaries for Intel and Apple
+Silicon automatically when a `v*` tag is pushed.
+
 `make install` builds the release executable and installs a `Rewrap Markdown`
 text filter into BBEdit's Text Filters folder. It asks BBEdit for that folder
 with AppleScript. Override the install location with `BBEDIT_FILTERS_DIR`:
