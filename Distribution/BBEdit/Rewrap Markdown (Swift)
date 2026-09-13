@@ -1,0 +1,44 @@
+#!/bin/sh
+# Copyright 2026 Seth Dillingham
+# SPDX-License-Identifier: Apache-2.0
+#
+# BBEdit text filter wrapper for the Swift rewrap-markdown executable.
+#
+# Install this file in BBEdit's Text Filters folder. Install the compiled
+# `rewrap-markdown` executable in one of the searched locations below, or set
+# REWRAP_MARKDOWN to its absolute path.
+
+set -u
+
+# Edit this value to use a different BBEdit wrapping width, such as 80 or 120.
+WRAP_WIDTH=70
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+for candidate in \
+	"${REWRAP_MARKDOWN:-}" \
+	"$script_dir/rewrap-markdown" \
+	"$HOME/bin/rewrap-markdown" \
+	"$HOME/.local/bin/rewrap-markdown"
+do
+	if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+		if [ "$#" -eq 0 ]; then
+			exec "$candidate" "$WRAP_WIDTH"
+		else
+			exec "$candidate" "$@"
+		fi
+	fi
+done
+
+cat >&2 <<'EOF'
+Could not find the rewrap-markdown executable.
+
+Install it in one of these locations:
+  ~/bin/rewrap-markdown
+  ~/.local/bin/rewrap-markdown
+  BBEdit's Text Filters folder, beside this wrapper
+
+Or edit this wrapper / set REWRAP_MARKDOWN to the executable's absolute path.
+EOF
+
+exit 127

@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+dist/
+__pycache__/
+*.py[cod]
+DerivedData/
+
+*.xcodeproj
+*.xcworkspace
+.DS_Store
+*-BBEditPreviewTemp.md.html
