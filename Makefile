@@ -6,18 +6,29 @@ VERSION := $(shell cat VERSION)
 FILTER_NAME ?= Rewrap Markdown
 FILTER_WIDTH ?= 70
 RELEASE_BINARY := $(abspath .build/release/$(PRODUCT))
+INSTALL_BIN_DIR ?= $(HOME)/.local/bin
+INSTALLED_BINARY := $(INSTALL_BIN_DIR)/$(PRODUCT)
 DIST_DIR := dist
 ARCH := $(shell uname -m)
 DIST_BINARY := $(DIST_DIR)/$(PRODUCT)-$(VERSION)-macos-$(ARCH)
 DIST_PYTHON := $(DIST_DIR)/$(PRODUCT)-$(VERSION).py
 DIST_BBEDIT_SWIFT := $(DIST_DIR)/Rewrap Markdown (Swift)
+DIST_BBEDIT_HARD_WRAP := $(DIST_DIR)/Markdown-Hard-Wrap-Menu-Action.applescript
+HARD_WRAP_SCRIPT_NAME := Text•Hard Wrap….scpt
+HARD_WRAP_IMMEDIATE_SCRIPT_NAME := Text•Hard Wrap.scpt
 BBEDIT_FILTERS_DIR ?= $(shell osascript \
 	-e 'tell application "BBEdit" to set allFolders to support folders' \
 	-e 'set targetFolder to (|text filters| of allFolders)' \
 	-e 'return POSIX path of targetFolder' 2>/dev/null)
-INSTALLED_FILTER := $(BBEDIT_FILTERS_DIR)/$(FILTER_NAME)
+BBEDIT_MENU_SCRIPTS_DIR ?= $(shell osascript \
+	-e 'tell application "BBEdit" to set allFolders to support folders' \
+	-e 'set targetFolder to (|menu scripts| of allFolders)' \
+	-e 'return POSIX path of targetFolder' 2>/dev/null)
+INSTALLED_FILTER = $(BBEDIT_FILTERS_DIR)/$(FILTER_NAME)
+INSTALLED_HARD_WRAP = $(patsubst %/,%,$(BBEDIT_MENU_SCRIPTS_DIR))/$(HARD_WRAP_SCRIPT_NAME)
+INSTALLED_HARD_WRAP_IMMEDIATE = $(patsubst %/,%,$(BBEDIT_MENU_SCRIPTS_DIR))/$(HARD_WRAP_IMMEDIATE_SCRIPT_NAME)
 
-.PHONY: build release test test-executable dist install uninstall clean print-bbedit-filters-dir
+.PHONY: build release test test-executable dist install-cli install install-hard-wrap uninstall uninstall-hard-wrap clean print-bbedit-filters-dir
 
 build:
 	swift build
@@ -36,11 +47,18 @@ dist: test-executable
 	cp "$(RELEASE_BINARY)" "$(DIST_BINARY)"
 	cp Reference/rewrap_markdown.py "$(DIST_PYTHON)"
 	cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "$(DIST_BBEDIT_SWIFT)"
+	cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "$(DIST_BBEDIT_HARD_WRAP)"
 	chmod +x "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)"
 	@echo "Created release artifacts in $(DIST_DIR):"
-	@printf '  %s\n' "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)"
+	@printf '  %s\n' "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)" "$(DIST_BBEDIT_HARD_WRAP)"
 
-install: release
+install-cli: release
+	mkdir -p "$(INSTALL_BIN_DIR)"
+	cp "$(RELEASE_BINARY)" "$(INSTALLED_BINARY)"
+	chmod +x "$(INSTALLED_BINARY)"
+	@echo "Installed rewrap-markdown executable: $(INSTALLED_BINARY)"
+
+install: install-cli
 	@if [ -z "$(BBEDIT_FILTERS_DIR)" ]; then \
 		echo "Could not determine BBEdit's Text Filters folder."; \
 		echo "Set BBEDIT_FILTERS_DIR=/path/to/Text Filters and run make install again."; \
@@ -53,13 +71,25 @@ install: release
 		printf '%s\n' '# Edit this value to use a different BBEdit wrapping width, such as 80 or 120.'; \
 		printf '%s\n' 'WRAP_WIDTH=$(FILTER_WIDTH)'; \
 		printf '%s\n' 'if [ "$$#" -eq 0 ]; then'; \
-		printf '%s\n' '	exec "$(RELEASE_BINARY)" "$$WRAP_WIDTH"'; \
+		printf '%s\n' '	exec "$(INSTALLED_BINARY)" "$$WRAP_WIDTH"'; \
 		printf '%s\n' 'else'; \
-		printf '%s\n' '	exec "$(RELEASE_BINARY)" "$$@"'; \
+		printf '%s\n' '	exec "$(INSTALLED_BINARY)" "$$@"'; \
 		printf '%s\n' 'fi'; \
 	} > "$(INSTALLED_FILTER)"
 	chmod +x "$(INSTALLED_FILTER)"
 	@echo "Installed BBEdit text filter: $(INSTALLED_FILTER)"
+
+install-hard-wrap: install-cli
+	@if [ -z "$(BBEDIT_MENU_SCRIPTS_DIR)" ]; then \
+		echo "Could not determine BBEdit's Menu Scripts folder."; \
+		echo "Set BBEDIT_MENU_SCRIPTS_DIR=/path/to/Menu Scripts and run make install-hard-wrap again."; \
+		exit 1; \
+	fi
+	mkdir -p "$(BBEDIT_MENU_SCRIPTS_DIR)"
+	osacompile -o "$(INSTALLED_HARD_WRAP)" "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript"
+	ln -sfn "$(HARD_WRAP_SCRIPT_NAME)" "$(INSTALLED_HARD_WRAP_IMMEDIATE)"
+	@echo "Installed BBEdit Hard Wrap menu actions:"
+	@printf '  %s\n' "$(INSTALLED_HARD_WRAP)" "$(INSTALLED_HARD_WRAP_IMMEDIATE)"
 
 uninstall:
 	@if [ -z "$(BBEDIT_FILTERS_DIR)" ]; then \
@@ -69,6 +99,15 @@ uninstall:
 	fi
 	rm -f "$(INSTALLED_FILTER)"
 	@echo "Removed BBEdit text filter: $(INSTALLED_FILTER)"
+
+uninstall-hard-wrap:
+	@if [ -z "$(BBEDIT_MENU_SCRIPTS_DIR)" ]; then \
+		echo "Could not determine BBEdit's Menu Scripts folder."; \
+		echo "Set BBEDIT_MENU_SCRIPTS_DIR=/path/to/Menu Scripts and run make uninstall-hard-wrap again."; \
+		exit 1; \
+	fi
+	rm -f "$(INSTALLED_HARD_WRAP)" "$(INSTALLED_HARD_WRAP_IMMEDIATE)"
+	@echo "Removed BBEdit Hard Wrap menu actions."
 
 clean:
 	swift package clean

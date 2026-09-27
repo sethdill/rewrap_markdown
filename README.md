@@ -1,205 +1,236 @@
 # Rewrap Markdown
 
-A Swift command-line Markdown rewrap filter, ported from the original BBEdit
-Python text filter. Both implementations read UTF-8 text from standard input
-and write the rewrapped Markdown to standard output.
+**Wrap prose without mangling Markdown.**
 
-Current version: `0.1`.
+Rewrap Markdown is a command-line filter and BBEdit integration that makes
+long Markdown readable in source form while preserving the structure that
+makes it Markdown.
 
-## Install for BBEdit
+Give it this unwrapped task inside a blockquote:
 
-Download files from the latest GitHub Release:
-
-<https://github.com/sethdill/rewrap_markdown/releases/latest>
-
-Do not use GitHub's green **Code** button unless you want the source code.
-Regular BBEdit users probably want one of the release downloads instead.
-
-### Option 1: Swift Version
-
-This is the faster version. Download the binary for your Mac:
-
-- Apple Silicon:
-  [rewrap-markdown-0.1-macos-arm64](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/rewrap-markdown-0.1-macos-arm64)
-- Intel: [rewrap-markdown-0.1-macos-x86_64](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/rewrap-markdown-0.1-macos-x86_64)
-
-Also download:
-
-- [Rewrap-Markdown-Swift](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/Rewrap-Markdown-Swift)
-
-If the files are in your Downloads folder, install them with these commands.
-For Apple Silicon:
-
-```sh
-mkdir -p "$HOME/.local/bin"
-mkdir -p "$HOME/Library/Application Support/BBEdit/Text Filters"
-cp "$HOME/Downloads/rewrap-markdown-0.1-macos-arm64" "$HOME/.local/bin/rewrap-markdown"
-cp "$HOME/Downloads/Rewrap-Markdown-Swift" "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown"
-chmod +x "$HOME/.local/bin/rewrap-markdown"
-chmod +x "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown"
-xattr -d com.apple.quarantine "$HOME/.local/bin/rewrap-markdown" 2>/dev/null || true
-xattr -d com.apple.quarantine "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown" 2>/dev/null || true
+```markdown
+> - [ ] This release note has a [long link](https://example.com/releases/next) and an `inline command` that should stay intact while the surrounding prose wraps neatly.
 ```
 
-For Intel, use the same commands but change the binary filename:
+At `54` columns, it produces:
 
-```sh
-cp "$HOME/Downloads/rewrap-markdown-0.1-macos-x86_64" "$HOME/.local/bin/rewrap-markdown"
+```markdown
+> - [ ] This release note has a
+>   [long link](https://example.com/releases/next) and
+>   an `inline command` that should stay intact while
+>   the surrounding prose wraps neatly.
 ```
 
-The BBEdit menu item will appear as **Rewrap Markdown**. To use a different
-wrap width, edit the installed filter and change:
+and at `80` columns it produces:
 
-```sh
-WRAP_WIDTH=70
+```markdown
+> - [ ] This release note has a [long link](https://example.com/releases/next)
+>   and an `inline command` that should stay intact while the surrounding prose
+>   wraps neatly.
 ```
 
-to `WRAP_WIDTH=80`, `WRAP_WIDTH=120`, or whatever width you prefer.
+The prose is tidy. The quote, task marker, hanging indentation, link, and code
+span still mean exactly what they meant before.
 
-In BBEdit, use **Text > Apply Text Filter > Rewrap Markdown**.
+## Why Use It?
 
-### Option 2: Python Version
+A generic line wrapper sees words and spaces. Rewrap Markdown also sees lists,
+blockquotes, links, code, tables, alerts, comments, and hard line breaks.
 
-This version is easier to inspect and tinker with, and can be installed by
-itself. It intentionally supports Python 3.10 and newer; it may also work on
-Python 3.9.
+That makes it useful when you:
 
-Download:
-
-- [rewrap-markdown-0.1.py](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.1/rewrap-markdown-0.1.py)
-
-If the file is in your Downloads folder:
-
-```sh
-mkdir -p "$HOME/Library/Application Support/BBEdit/Text Filters"
-cp "$HOME/Downloads/rewrap-markdown-0.1.py" "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown.py"
-chmod +x "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown.py"
-xattr -d com.apple.quarantine "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown.py" 2>/dev/null || true
-```
-
-To use a different wrap width, edit the installed Python filter and change:
-
-```python
-DEFAULT_WIDTH = 70
-```
-
-In BBEdit, use **Text > Apply Text Filter > Rewrap Markdown.py**.
+- prefer readable, consistently wrapped Markdown source;
+- move text among GitHub, Jira, Confluence, and text editors;
+- need to reflow a list or quoted passage without repairing its indentation;
+- want to wrap prose while leaving code blocks, tables, and HTML alone.
 
 ## Command Line
 
-```sh
-swift run rewrap-markdown 80 < input.md > output.md
-```
-
-Show the version:
+Wrap a document at 80 columns:
 
 ```sh
-swift run rewrap-markdown --version
-swift run rewrap-markdown -v
-python3 Reference/rewrap_markdown.py --version
-python3 Reference/rewrap_markdown.py -v
+rewrap-markdown 80 < draft.md > draft-wrapped.md
 ```
 
-Width resolution:
+Or rewrap text on the macOS clipboard:
+
+```sh
+pbpaste | rewrap-markdown 72 | pbcopy
+```
+
+The width is chosen in this order:
 
 1. First command-line argument
-2. `MD_REWRAP_WIDTH`
+2. `MD_REWRAP_WIDTH` (environment variable)
 3. Default width of `70`
 
-## Build From Source
+Use `rewrap-markdown --version` or `rewrap-markdown -v` to print the version.
 
-Common project tasks are available through `make`:
+## BBEdit
+
+Rewrap Markdown offers two BBEdit workflows.
+
+### Rewrap Markdown Text Filter
+
+The standard integration adds **Text > Apply Text Filter > Rewrap Markdown**.
+It filters the selection, or the entire document when nothing is selected, at
+a configured width.
+
+From a source checkout:
+
+```sh
+make install
+```
+
+The default width is 70. Choose another width during installation with:
+
+```sh
+FILTER_WIDTH=80 make install
+```
+
+To change the preferred width after installing the filter, hold the option key
+when you choose the filter, then edit the `WRAP_WIDTH` variable.
+
+### Markdown-Aware Hard Wrap
+
+The optional menu attachment takes over **Text > Hard Wrap…** only for
+Markdown documents. It asks for a width, remembers your answer, and rewraps the
+selection or document. For other document types, BBEdit behaves normally.
+
+```sh
+make install-hard-wrap
+```
+
+Its modifiers mirror BBEdit's own menu behavior:
+
+- Use **Text > Hard Wrap** to rewrap immediately using the remembered width.
+- Hold Shift to bypass Rewrap Markdown and run BBEdit's built-in command.
+
+Remove the optional attachment with `make uninstall-hard-wrap`.
+
+The Hard Wrap integration is currently available from source and is planned
+for the 0.2 release.
+
+## Install
+
+### Release Binary
+
+Download the binary for your Mac from the
+[latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
+For the current 0.1 release:
+
+```sh
+VERSION=0.1
+ARCH=$(uname -m)
+mkdir -p "$HOME/.local/bin"
+install -m 755 \
+  "$HOME/Downloads/rewrap-markdown-${VERSION}-macos-${ARCH}" \
+  "$HOME/.local/bin/rewrap-markdown"
+```
+
+`~/.local/bin` is the default installation directory because it is stable,
+per-user, and does not require administrator access. If it is not already on
+your shell path, add this to `~/.zprofile`:
+
+```sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+For BBEdit 0.1 integration, also download `Rewrap-Markdown-Swift` from the
+release and install it as a text filter:
+
+```sh
+mkdir -p "$HOME/Library/Application Support/BBEdit/Text Filters"
+install -m 755 \
+  "$HOME/Downloads/Rewrap-Markdown-Swift" \
+  "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown"
+```
+
+### Build From Source
+
+Building requires Swift 5.9 or newer:
+
+```sh
+git clone https://github.com/sethdill/rewrap_markdown.git
+cd rewrap_markdown
+make install-cli
+```
+
+`make install-cli` builds a release executable and copies it to
+`~/.local/bin/rewrap-markdown`. It does not require BBEdit.
+
+For BBEdit, use `make install` instead. It installs the executable and the
+standard text filter. The filter points to the installed executable, so it
+keeps working if the source checkout is moved or deleted.
+
+Override the executable directory or BBEdit support folder when needed:
+
+```sh
+INSTALL_BIN_DIR=/usr/local/bin make install-cli
+BBEDIT_FILTERS_DIR="/path/to/Text Filters" make install
+```
+
+Use a directory your account can write to. Running the entire target with
+`sudo` is not recommended because the BBEdit integration is installed for the
+current user.
+
+## Markdown It Understands
+
+Rewrap Markdown handles ordinary paragraphs plus the places where wrapping is
+easy to get subtly wrong:
+
+- ordered, unordered, nested, and task lists;
+- blockquotes and quoted lists;
+- GitHub alert blocks;
+- footnote definitions;
+- inline links, images, autolinks, bare URLs, and code spans;
+- backslash and two-space hard line breaks.
+
+It leaves structural content alone, including headings, reference definitions,
+tables, fenced and indented code, HTML blocks, comments, and thematic breaks.
+
+For a deliberately excessive tour, compare
+[the unwrapped demo](Samples/gfm_supported_unwrapped.md) with
+[the wrapped result](Samples/gfm_supported_wrapped.md).
+
+## Other Editors
+
+The executable reads UTF-8 from standard input and writes UTF-8 to standard
+output, so it works with any editor that can filter selected text through a
+command.
+
+Vim and Neovim can filter a visual selection:
+
+```vim
+:'<,'>!rewrap-markdown 72
+```
+
+Or the entire buffer:
+
+```vim
+:%!rewrap-markdown 72
+```
+
+In Emacs, `C-u M-| rewrap-markdown 72 RET` replaces the active region with the
+filtered output.
+
+## Development
 
 ```sh
 make build
 make test
 make test-executable
 make dist
-make install
 ```
 
-`make dist` creates release artifacts in `dist/`: a macOS binary, the standalone
-Python filter, and a drop-in BBEdit wrapper for the Swift binary.
+The wrapping engine lives in `RewrapMarkdownCore`, separate from the
+stdin/stdout executable.
 
-GitHub Releases build and attach separate macOS binaries for Intel and Apple
-Silicon automatically when a `v*` tag is pushed.
+The test suite runs shared compatibility cases against the Swift implementation
+and the original Python reference implementation.
 
-`make install` builds the release executable and installs a `Rewrap Markdown`
-text filter into BBEdit's Text Filters folder. It asks BBEdit for that folder
-with AppleScript. Override the install location with `BBEDIT_FILTERS_DIR`:
-
-```sh
-BBEDIT_FILTERS_DIR="$HOME/Library/Application Support/BBEdit/Text Filters" make install
-```
-
-The generated BBEdit wrapper uses width `70` by default. Override that with
-`FILTER_WIDTH`:
-
-```sh
-FILTER_WIDTH=80 make install
-```
-
-After installation, you can also edit the generated BBEdit filter directly and
-change:
-
-```sh
-WRAP_WIDTH=70
-```
-
-to whatever width you want (like 80, 120, etc.)
-
-The implementation lives in `RewrapMarkdownCore` so the wrapping behavior can
-be tested separately from stdin/stdout plumbing.
-
-```sh
-swift test
-```
-
-The original Python implementation is included at:
-
-```text
-Reference/rewrap_markdown.py
-```
-
-The Swift BBEdit wrapper source is included at:
-
-```text
-Distribution/BBEdit/Rewrap Markdown (Swift)
-```
-
-This is a very simple shell script that just calls the Swift version.
-
-## Demo Document
-
-A deliberately unwrapped demo document and its wrapped counterpart are included
-at:
-
-```text
-Samples/gfm_supported_unwrapped.md
-Samples/gfm_supported_wrapped.md
-```
-
-Compare them to see the context-aware behavior on paragraphs, lists, quoted
-lists, links, tables, code fences, HTML, alerts, footnotes, and hard breaks.
-
-### Tests
-
-The tests use one shared set of compatibility cases. They always exercise the
-Swift core implementation and the in-repo Python implementation.
-
-Override the Python path with `PYTHON_REWRAP_MARKDOWN_PATH` to compare against
-another copy:
-
-```sh
-PYTHON_REWRAP_MARKDOWN_PATH=/path/to/Rewrap\ Markdown.py swift test
-```
-
-To run the same cases against the compiled Swift executable too:
-
-```sh
-swift build -c release
-REWRAP_MARKDOWN_EXECUTABLE=.build/release/rewrap-markdown swift test
-```
+My original Python script remains available at `Reference/rewrap_markdown.py`
+for comparison and experimentation; it is no longer the main installation path.
 
 ## License
 

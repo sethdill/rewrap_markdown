@@ -73,6 +73,7 @@ jobs:
           version=$(cat VERSION)
           cp Reference/rewrap_markdown.py "dist/rewrap-markdown-${version}.py"
           cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "dist/Rewrap-Markdown-Swift"
+          cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "dist/Markdown-Hard-Wrap-Menu-Action.applescript"
           chmod +x dist/*
 
       - name: Publish assets
