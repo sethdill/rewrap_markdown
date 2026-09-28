@@ -35,6 +35,14 @@ This creates:
 - `dist/rewrap-markdown-VERSION-macos-ARCH`
 - `dist/rewrap-markdown-VERSION.py`
 - `dist/Rewrap Markdown (Swift)`
+- `dist/Markdown-Hard-Wrap-Menu-Action.applescript`
+
+Build and verify a local unsigned installer with:
+
+```sh
+make pkg-unsigned
+Packaging/pkg/verify-installer.sh "dist/rewrap-markdown-$(cat VERSION)-unsigned.pkg"
+```
 
 This is useful for testing, but local builds only produce a binary for the
 current machine architecture. The GitHub Actions release workflow builds both:
@@ -44,8 +52,26 @@ current machine architecture. The GitHub Actions release workflow builds both:
 
 The workflow also uploads:
 
+- `rewrap-markdown-VERSION-unsigned.pkg`, universal for Intel and Apple Silicon
+- `rewrap-markdown-VERSION-unsigned.pkg.sha256`
 - `rewrap-markdown-VERSION.py`
 - `Rewrap-Markdown-Swift`
+- `Markdown-Hard-Wrap-Menu-Action.applescript`
+
+The installer is currently unsigned and not notarized. Before publishing a
+release, download the Actions-built package to a Mac and perform this manual
+Gatekeeper test:
+
+1. Verify the checksum with `shasum -a 256 -c PACKAGE.sha256`.
+2. Double-click the downloaded package and confirm macOS initially blocks it.
+3. Use **System Settings > Privacy & Security > Open Anyway** and confirm the
+   installer opens after authentication.
+4. Check the default component selections, install, and smoke-test both BBEdit
+   Hard Wrap commands.
+5. Run the installer again and confirm previously installed optional
+   components are selected.
+6. Run the installed uninstaller and confirm the BBEdit integrations and
+   `/usr/local/bin/rewrap-markdown` link are removed.
 
 The Python file can be installed directly as a BBEdit text filter. The Swift
 BBEdit wrapper should be installed alongside a downloaded Swift binary or

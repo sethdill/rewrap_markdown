@@ -113,6 +113,37 @@ for the 0.2 release.
 
 ## Install
 
+### macOS Installer (0.2)
+
+Starting with 0.2, the easiest installation is the universal macOS package
+from the [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
+Its Customize screen offers:
+
+- **Markdown-aware Hard Wrap**, selected by default;
+- **BBEdit Text Filter**, optional;
+- **Command-line link** at `/usr/local/bin/rewrap-markdown`, optional.
+
+The 0.2 installer is unsigned. After trying to open it, macOS may block it
+because it cannot verify the developer. Open **System Settings > Privacy &
+Security**, scroll to Security, click **Open Anyway** for the Rewrap Markdown
+installer, authenticate, and confirm **Open**. Only bypass this warning for an
+installer downloaded from this project's GitHub release.
+
+Each release includes a `.sha256` file. To verify the download before opening
+it, run this in the directory containing both files:
+
+```sh
+shasum -a 256 -c rewrap-markdown-0.2-unsigned.pkg.sha256
+```
+
+Upgrades retain the remembered Hard Wrap width and automatically update any
+optional components that were installed previously. To remove all package
+components and their receipts:
+
+```sh
+sudo "/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
+```
+
 ### Release Binary
 
 Download the binary for your Mac from the
@@ -162,6 +193,9 @@ make install-cli
 For BBEdit, use `make install` instead. It installs the executable and the
 standard text filter. The filter points to the installed executable, so it
 keeps working if the source checkout is moved or deleted.
+
+Developer-users can install both BBEdit integrations with `make install-all`
+and remove them plus the command-line executable with `make uninstall-all`.
 
 Override the executable directory or BBEdit support folder when needed:
 

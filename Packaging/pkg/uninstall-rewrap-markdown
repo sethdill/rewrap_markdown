@@ -1,0 +1,40 @@
+#!/bin/sh
+
+set -eu
+
+if [ "$(id -u)" -ne 0 ] && [ "${REWRAP_MARKDOWN_ALLOW_NON_ROOT_FOR_TESTING:-}" != 1 ]; then
+	echo "Run this uninstaller with sudo:" >&2
+	echo "  sudo \"$0\"" >&2
+	exit 1
+fi
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_dir/Components/Installer/resolve-user.sh"
+
+shared_dir=${REWRAP_MARKDOWN_SHARED_DIR:-/Library/Application Support/Rewrap Markdown}
+packages_dir="$bbedit_support_dir/Packages"
+menu_scripts_dir="$bbedit_support_dir/Menu Scripts"
+command_link=${REWRAP_MARKDOWN_COMMAND_LINK:-/usr/local/bin/rewrap-markdown}
+command_target="$shared_dir/rewrap-markdown"
+
+rm -rf "$packages_dir/Rewrap Markdown.bbpackage"
+rm -f "$menu_scripts_dir/Text•Hard Wrap….scpt" "$menu_scripts_dir/Text•Hard Wrap.scpt"
+
+if [ -L "$command_link" ] && [ "$(readlink "$command_link")" = "$command_target" ]; then
+	rm -f "$command_link"
+fi
+
+rm -rf "$shared_dir"
+
+if [ "${REWRAP_MARKDOWN_SKIP_RECEIPTS:-}" != 1 ]; then
+	for receipt in \
+		com.sethdillingham.rewrap-markdown.command-line \
+		com.sethdillingham.rewrap-markdown.text-filter \
+		com.sethdillingham.rewrap-markdown.hard-wrap \
+		com.sethdillingham.rewrap-markdown.core
+	do
+		pkgutil --forget "$receipt" >/dev/null 2>&1 || true
+	done
+fi
+
+echo "Rewrap Markdown has been uninstalled."

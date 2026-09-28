@@ -51,9 +51,56 @@ jobs:
           path: artifact/*
           if-no-files-found: error
 
+  package-macos:
+    name: Build universal macOS installer
+    needs: build-macos
+    runs-on: macos-26
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Download architecture binaries
+        uses: actions/download-artifact@v6
+        with:
+          pattern: rewrap-markdown-macos-*
+          path: architecture-binaries
+          merge-multiple: true
+
+      - name: Create universal executable
+        run: |
+          version=$(cat VERSION)
+          mkdir -p artifact
+          lipo -create \
+            "architecture-binaries/rewrap-markdown-${version}-macos-x86_64" \
+            "architecture-binaries/rewrap-markdown-${version}-macos-arm64" \
+            -output artifact/rewrap-markdown-universal
+          lipo artifact/rewrap-markdown-universal -verify_arch x86_64 arm64
+
+      - name: Build and verify unsigned installer
+        run: |
+          make package-unsigned RELEASE_BINARY="$PWD/artifact/rewrap-markdown-universal"
+          EXPECTED_ARCHS="x86_64 arm64" Packaging/pkg/verify-installer.sh "dist/rewrap-markdown-$(cat VERSION)-unsigned.pkg"
+
+      - name: Create installer checksum
+        run: |
+          package="rewrap-markdown-$(cat VERSION)-unsigned.pkg"
+          (cd dist && shasum -a 256 "$package" > "$package.sha256")
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: rewrap-markdown-macos-installer
+          path: |
+            dist/*.pkg
+            dist/*.pkg.sha256
+          if-no-files-found: error
+
   publish:
     name: Publish GitHub Release
-    needs: build-macos
+    needs: [build-macos, package-macos]
     runs-on: ubuntu-latest
 
     steps:
@@ -62,7 +109,7 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
-      - name: Download binary artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v6
         with:
           path: dist
@@ -74,7 +121,7 @@ jobs:
           cp Reference/rewrap_markdown.py "dist/rewrap-markdown-${version}.py"
           cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "dist/Rewrap-Markdown-Swift"
           cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "dist/Markdown-Hard-Wrap-Menu-Action.applescript"
-          chmod +x dist/*
+          chmod +x "dist/rewrap-markdown-${version}.py" "dist/Rewrap-Markdown-Swift"
 
       - name: Publish assets
         env:

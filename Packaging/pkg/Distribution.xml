@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="1">
+    <title>Rewrap Markdown</title>
+    <organization>com.sethdillingham</organization>
+    <product id="com.sethdillingham.rewrap-markdown" version="@VERSION@"/>
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+    <options customize="always" require-scripts="false" rootVolumeOnly="true" hostArchitectures="@ARCH@"/>
+
+    <script><![CDATA[
+        function componentWasInstalled(path) {
+            return system.files.fileExistsAtPath(path);
+        }
+    ]]></script>
+
+    <choices-outline>
+        <line choice="core"/>
+        <line choice="hard-wrap"/>
+        <line choice="text-filter"/>
+        <line choice="command-line"/>
+    </choices-outline>
+
+    <choice id="core" visible="false" selected="true">
+        <pkg-ref id="com.sethdillingham.rewrap-markdown.core"/>
+    </choice>
+    <choice id="hard-wrap"
+            title="Markdown-aware Hard Wrap"
+            description="Use Rewrap Markdown for BBEdit's Hard Wrap commands in Markdown documents."
+            start_selected="true">
+        <pkg-ref id="com.sethdillingham.rewrap-markdown.hard-wrap"/>
+    </choice>
+    <choice id="text-filter"
+            title="BBEdit Text Filter"
+            description="Add Rewrap Markdown to BBEdit's Apply Text Filter menu."
+            start_selected="componentWasInstalled('/Library/Application Support/Rewrap Markdown/Components/Text Filter/Rewrap Markdown.bbpackage-template')">
+        <pkg-ref id="com.sethdillingham.rewrap-markdown.text-filter"/>
+    </choice>
+    <choice id="command-line"
+            title="Command-line link"
+            description="Add rewrap-markdown to /usr/local/bin."
+            start_selected="componentWasInstalled('/Library/Application Support/Rewrap Markdown/Components/Command Line/installed')">
+        <pkg-ref id="com.sethdillingham.rewrap-markdown.command-line"/>
+    </choice>
+
+    <pkg-ref id="com.sethdillingham.rewrap-markdown.core" version="@VERSION@" onConclusion="none">core.pkg</pkg-ref>
+    <pkg-ref id="com.sethdillingham.rewrap-markdown.hard-wrap" version="@VERSION@" onConclusion="none">hard-wrap.pkg</pkg-ref>
+    <pkg-ref id="com.sethdillingham.rewrap-markdown.text-filter" version="@VERSION@" onConclusion="none">text-filter.pkg</pkg-ref>
+    <pkg-ref id="com.sethdillingham.rewrap-markdown.command-line" version="@VERSION@" onConclusion="none">command-line.pkg</pkg-ref>
+</installer-gui-script>

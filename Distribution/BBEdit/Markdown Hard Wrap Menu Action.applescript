@@ -8,9 +8,11 @@
 --
 -- The bullet is Option-8. The first filename ends with a single ellipsis.
 
-property wrapWidth : 70
+property defaultWrapWidth : 70
 property maxWrapWidth : 1000
 property rewrapMarkdownPath : ""
+property preferencesSuite : "com.sethdillingham.rewrap-markdown"
+property wrapWidthKey : "wrapWidth"
 
 use framework "AppKit"
 use framework "Foundation"
@@ -49,12 +51,13 @@ on MenuSelect(menuName, itemName)
 		end tell
 	end tell
 
+	set rememberedWidth to my rememberedWrapWidth()
 	if itemName is "Hard Wrap" then
-		set requestedWidth to my wrapWidth
+		set requestedWidth to rememberedWidth
 	else
 		try
-			set requestedWidth to my askForWrapWidth()
-			set my wrapWidth to requestedWidth
+			set requestedWidth to my askForWrapWidth(rememberedWidth)
+			my saveWrapWidth(requestedWidth)
 		on error number -128
 			return true
 		end try
@@ -100,9 +103,25 @@ on isShiftKeyPressed()
 	return ((rawFlags div shiftMask) mod 2 is not 0)
 end isShiftKeyPressed
 
-on askForWrapWidth()
+on rememberedWrapWidth()
+	set userDefaults to current application's NSUserDefaults's alloc()'s initWithSuiteName:(my preferencesSuite)
+	set savedValue to userDefaults's objectForKey:(my wrapWidthKey)
+	if savedValue is missing value then return my defaultWrapWidth
+
+	set savedWidth to savedValue's integerValue() as integer
+	if savedWidth is less than 1 or savedWidth is greater than maxWrapWidth then return my defaultWrapWidth
+	return savedWidth
+end rememberedWrapWidth
+
+on saveWrapWidth(newWidth)
+	set userDefaults to current application's NSUserDefaults's alloc()'s initWithSuiteName:(my preferencesSuite)
+	userDefaults's setInteger:newWidth forKey:(my wrapWidthKey)
+	userDefaults's synchronize()
+end saveWrapWidth
+
+on askForWrapWidth(currentWidth)
 	repeat
-		set dialogResult to display dialog "Rewrap Markdown width:" default answer (my wrapWidth as text) buttons {"Cancel", "Rewrap"} default button "Rewrap" cancel button "Cancel"
+		set dialogResult to display dialog "Rewrap Markdown width:" default answer (currentWidth as text) buttons {"Cancel", "Rewrap"} default button "Rewrap" cancel button "Cancel"
 		set widthText to text returned of dialogResult
 
 		try
@@ -142,13 +161,23 @@ on findRewrapMarkdownExecutable()
 	end if
 
 	set homePath to POSIX path of (path to home folder)
-	set candidatePaths to {homePath & ".local/bin/rewrap-markdown", homePath & "bin/rewrap-markdown", "/opt/homebrew/bin/rewrap-markdown", "/usr/local/bin/rewrap-markdown"}
+	set candidatePaths to {"/Library/Application Support/Rewrap Markdown/rewrap-markdown"}
+
+	try
+		tell application "BBEdit.app"
+			set allFolders to support folders
+			set packagesPath to POSIX path of (|packages| of allFolders)
+		end tell
+		set end of candidatePaths to packagesPath & "Rewrap Markdown.bbpackage/Contents/Text Filters/Rewrap Markdown"
+	end try
+
+	set candidatePaths to candidatePaths & {homePath & ".local/bin/rewrap-markdown", homePath & "bin/rewrap-markdown", "/opt/homebrew/bin/rewrap-markdown", "/usr/local/bin/rewrap-markdown"}
 
 	repeat with candidatePath in candidatePaths
 		if my isExecutable(candidatePath as text) then return candidatePath as text
 	end repeat
 
-	error "Could not find rewrap-markdown. Install it at ~/.local/bin/rewrap-markdown or edit rewrapMarkdownPath in this script."
+	error "Could not find rewrap-markdown. Install the Rewrap Markdown BBEdit package, install the command at ~/.local/bin/rewrap-markdown, or edit rewrapMarkdownPath in this script."
 end findRewrapMarkdownExecutable
 
 on isExecutable(posixPath)
