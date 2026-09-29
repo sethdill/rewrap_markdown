@@ -51,6 +51,7 @@ installer_license="$expanded/Resources/LICENSE.txt"
 [ -f "$license" ]
 [ -f "$notice" ]
 [ -f "$installer_license" ]
+grep -q '"License" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.' "$installer_license"
 lipo "$binary" -verify_arch $expected_archs
 "$binary" --version
 printf '%s\n' 'A long Markdown paragraph that verifies the packaged executable can wrap its input.' | "$binary" 40 >/dev/null

@@ -13,6 +13,10 @@ The product package contains four components:
 - **Command-line link** is not selected by default. It links
   `/usr/local/bin/rewrap-markdown` to the core executable.
 
+The installer License pane uses a generated copy with hard-wrapped paragraph
+lines joined so Installer can flow the text to its own window width. The
+canonical `LICENSE` file is installed unchanged with the executable.
+
 When the installer is run again, optional components already present in the
 shared installation are selected automatically so upgrades update them. The
 remembered Hard Wrap width is stored in the user's preferences rather than in

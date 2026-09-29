@@ -83,7 +83,7 @@ package-unsigned:
 	cp "$(RELEASE_BINARY)" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/rewrap-markdown"
 	chmod +x "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/rewrap-markdown"
 	cp LICENSE NOTICE "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/"
-	cp LICENSE "$(PKG_RESOURCES_DIR)/LICENSE.txt"
+	awk -f Packaging/pkg/unwrap-license.awk LICENSE > "$(PKG_RESOURCES_DIR)/LICENSE.txt"
 	cp "Packaging/pkg/uninstall-rewrap-markdown" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/uninstall-rewrap-markdown"
 	cp "Packaging/pkg/resolve-user.sh" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/Components/Installer/resolve-user.sh"
 	chmod +x "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/uninstall-rewrap-markdown"
