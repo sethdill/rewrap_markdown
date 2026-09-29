@@ -162,22 +162,13 @@ on findRewrapMarkdownExecutable()
 
 	set homePath to POSIX path of (path to home folder)
 	set candidatePaths to {"/Library/Application Support/Rewrap Markdown/rewrap-markdown"}
-
-	try
-		tell application "BBEdit.app"
-			set allFolders to support folders
-			set packagesPath to POSIX path of (|packages| of allFolders)
-		end tell
-		set end of candidatePaths to packagesPath & "Rewrap Markdown.bbpackage/Contents/Text Filters/Rewrap Markdown"
-	end try
-
 	set candidatePaths to candidatePaths & {homePath & ".local/bin/rewrap-markdown", homePath & "bin/rewrap-markdown", "/opt/homebrew/bin/rewrap-markdown", "/usr/local/bin/rewrap-markdown"}
 
 	repeat with candidatePath in candidatePaths
 		if my isExecutable(candidatePath as text) then return candidatePath as text
 	end repeat
 
-	error "Could not find rewrap-markdown. Install the Rewrap Markdown BBEdit package, install the command at ~/.local/bin/rewrap-markdown, or edit rewrapMarkdownPath in this script."
+	error "Could not find rewrap-markdown. Install Rewrap Markdown, install the command at ~/.local/bin/rewrap-markdown, or edit rewrapMarkdownPath in this script."
 end findRewrapMarkdownExecutable
 
 on isExecutable(posixPath)
