@@ -44,7 +44,7 @@ import re
 import sys
 from typing import Literal, Optional
 
-VERSION = "0.1"
+VERSION = "0.2"
 DEFAULT_WIDTH = 70
 BreakStyle = Literal["\\", "  "]
 

@@ -1,6 +1,7 @@
 .build/
 .swiftpm/
 dist/
+plans/
 __pycache__/
 *.py[cod]
 DerivedData/

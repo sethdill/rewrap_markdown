@@ -18,6 +18,7 @@ Before a release, update:
 - `RewrapMarkdown.version` in `Sources/RewrapMarkdownCore/RewrapMarkdown.swift`
 - `VERSION` in `Reference/rewrap_markdown.py`
 - the current version note in `README.md`
+- `RELEASE_NOTES.md`
 
 The test suite checks that the implementations report the version from
 `VERSION`.
@@ -35,6 +36,14 @@ This creates:
 - `dist/rewrap-markdown-VERSION-macos-ARCH`
 - `dist/rewrap-markdown-VERSION.py`
 - `dist/Rewrap Markdown (Swift)`
+- `dist/Markdown-Hard-Wrap-Menu-Action.applescript`
+
+Build and verify a local unsigned installer with:
+
+```sh
+make pkg-unsigned
+Packaging/pkg/verify-installer.sh "dist/rewrap-markdown-$(cat VERSION)-unsigned.pkg"
+```
 
 This is useful for testing, but local builds only produce a binary for the
 current machine architecture. The GitHub Actions release workflow builds both:
@@ -44,8 +53,30 @@ current machine architecture. The GitHub Actions release workflow builds both:
 
 The workflow also uploads:
 
+- `rewrap-markdown-VERSION-unsigned.pkg`, universal for Intel and Apple Silicon
+- `rewrap-markdown-VERSION-unsigned.pkg.sha256`
 - `rewrap-markdown-VERSION.py`
 - `Rewrap-Markdown-Swift`
+- `Markdown-Hard-Wrap-Menu-Action.applescript`
+
+Before opening the release pull request, run the `Release` workflow manually
+from the release branch with **Publish** disabled and leave **Tag** empty. This
+builds the release-candidate artifacts without creating a GitHub Release.
+
+The installer is currently unsigned and not notarized. Before publishing a
+release, download the Actions-built package to a Mac and perform this manual
+Gatekeeper test:
+
+1. Verify the checksum with `shasum -a 256 -c PACKAGE.sha256`.
+2. Double-click the downloaded package and confirm macOS initially blocks it.
+3. Use **System Settings > Privacy & Security > Open Anyway** and confirm the
+   installer opens after authentication.
+4. Check the default component selections, install, and smoke-test both BBEdit
+   Hard Wrap commands.
+5. Run the installer again and confirm previously installed optional
+   components are selected.
+6. Run the installed uninstaller and confirm the BBEdit integrations and
+   `/usr/local/bin/rewrap-markdown` link are removed.
 
 The Python file can be installed directly as a BBEdit text filter. The Swift
 BBEdit wrapper should be installed alongside a downloaded Swift binary or
@@ -53,11 +84,11 @@ configured to point at it.
 
 ## Tagging
 
-For version `0.1`, tag the release as:
+For version `0.2`, tag the tested merge commit as:
 
 ```sh
-git tag v0.1
-git push origin main v0.1
+git tag v0.2
+git push origin main v0.2
 ```
 
 Pushing the tag runs the release workflow. If the GitHub Release already exists,
@@ -65,4 +96,4 @@ the workflow uploads or replaces the assets. If the release does not exist, the
 workflow creates it.
 
 For a tag that already exists, run the `Release` workflow manually from GitHub
-Actions and enter the tag name, such as `v0.1`.
+Actions, enable **Publish**, and enter the tag name, such as `v0.2`.

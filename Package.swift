@@ -6,6 +6,7 @@ import PackageDescription
 
 let package = Package(
     name: "rewrap-markdown",
+    platforms: [.macOS(.v12)],
     products: [
         .executable(name: "rewrap-markdown", targets: ["rewrap-markdown"]),
         .library(name: "RewrapMarkdownCore", targets: ["RewrapMarkdownCore"]),

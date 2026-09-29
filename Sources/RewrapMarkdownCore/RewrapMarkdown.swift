@@ -4,7 +4,7 @@
 import Foundation
 
 public enum RewrapMarkdown {
-    public static let version = "0.1"
+    public static let version = "0.2"
     public static let defaultWidth = 70
 
     public static var versionString: String {

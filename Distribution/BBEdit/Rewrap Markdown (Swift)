@@ -18,6 +18,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 for candidate in \
 	"${REWRAP_MARKDOWN:-}" \
 	"$script_dir/rewrap-markdown" \
+	"/Library/Application Support/Rewrap Markdown/rewrap-markdown" \
 	"$HOME/bin/rewrap-markdown" \
 	"$HOME/.local/bin/rewrap-markdown"
 do

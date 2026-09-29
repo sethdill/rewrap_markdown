@@ -1,0 +1,22 @@
+#!/bin/sh
+
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_dir/resolve-user.sh"
+
+shared_dir=${REWRAP_MARKDOWN_SHARED_DIR:-/Library/Application Support/Rewrap Markdown}
+source_package="$shared_dir/Components/Text Filter/Rewrap Markdown.bbpackage-template"
+packages_dir="$bbedit_support_dir/Packages"
+installed_package="$packages_dir/Rewrap Markdown.bbpackage"
+
+mkdir -p "$packages_dir"
+chown "$install_user:$install_group" "$packages_dir"
+
+rm -rf "$installed_package"
+ditto "$source_package" "$installed_package"
+chown -R "$install_user:$install_group" "$installed_package"
+
+echo "rewrap-markdown: installed BBEdit Text Filter package in $packages_dir"
+
+exit 0

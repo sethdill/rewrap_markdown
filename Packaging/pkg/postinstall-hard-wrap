@@ -1,0 +1,26 @@
+#!/bin/sh
+
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$script_dir/resolve-user.sh"
+
+shared_dir=${REWRAP_MARKDOWN_SHARED_DIR:-/Library/Application Support/Rewrap Markdown}
+source_dir="$shared_dir/Components/Hard Wrap"
+menu_scripts_dir="$bbedit_support_dir/Menu Scripts"
+hard_wrap_script="$menu_scripts_dir/Text•Hard Wrap….scpt"
+hard_wrap_immediate_script="$menu_scripts_dir/Text•Hard Wrap.scpt"
+
+mkdir -p "$menu_scripts_dir"
+chown "$install_user:$install_group" "$menu_scripts_dir"
+
+install -m 0644 "$source_dir/Text•Hard Wrap….scpt" "$hard_wrap_script"
+rm -f "$hard_wrap_immediate_script"
+ln -s "Text•Hard Wrap….scpt" "$hard_wrap_immediate_script"
+
+chown "$install_user:$install_group" "$hard_wrap_script"
+chown -h "$install_user:$install_group" "$hard_wrap_immediate_script"
+
+echo "rewrap-markdown: installed Hard Wrap integration in $menu_scripts_dir"
+
+exit 0
