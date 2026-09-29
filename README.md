@@ -1,5 +1,19 @@
 # Rewrap Markdown
 
+## Contents
+
+- [Rewrap Prose](#rewrap-prose)
+- [Why Use It?](#why-use-it)
+- [Markdown It Understands](#markdown-it-understands)
+- [Install](#install)
+- [Command Line](#command-line)
+- [BBEdit](#bbedit)
+- [Other Editors](#other-editors)
+- [Development](#development)
+- [License](#license)
+
+## Rewrap Prose
+
 **Wrap prose without mangling Markdown.**
 
 Rewrap Markdown is a command-line filter and BBEdit integration that makes
@@ -44,69 +58,24 @@ That makes it useful when you:
 - need to reflow a list or quoted passage without repairing its indentation;
 - want to wrap prose while leaving code blocks, tables, and HTML alone.
 
-## Command Line
+## Markdown It Understands
 
-Wrap a document at 80 columns:
+Rewrap Markdown handles ordinary paragraphs plus the places where wrapping is
+easy to get subtly wrong:
 
-```sh
-rewrap-markdown 80 < draft.md > draft-wrapped.md
-```
+- ordered, unordered, nested, and task lists;
+- blockquotes and quoted lists;
+- GitHub alert blocks;
+- footnote definitions;
+- inline links, images, autolinks, bare URLs, and code spans;
+- backslash and two-space hard line breaks.
 
-Or rewrap text on the macOS clipboard:
+It leaves structural content alone, including headings, reference definitions,
+tables, fenced and indented code, HTML blocks, comments, and thematic breaks.
 
-```sh
-pbpaste | rewrap-markdown 72 | pbcopy
-```
-
-The width is chosen in this order:
-
-1. First command-line argument
-2. `MD_REWRAP_WIDTH` (environment variable)
-3. Default width of `70`
-
-Use `rewrap-markdown --version` or `rewrap-markdown -v` to print the version.
-
-## BBEdit
-
-Rewrap Markdown offers two BBEdit workflows.
-
-### Rewrap Markdown Text Filter
-
-The standard integration adds **Text > Apply Text Filter > Rewrap Markdown**.
-It filters the selection, or the entire document when nothing is selected, at
-a configured width.
-
-From a source checkout:
-
-```sh
-make install
-```
-
-The default width is 70. Choose another width during installation with:
-
-```sh
-FILTER_WIDTH=80 make install
-```
-
-To change the preferred width after installing the filter, hold the option key
-when you choose the filter, then edit the `WRAP_WIDTH` variable.
-
-### Markdown-Aware Hard Wrap
-
-The optional menu attachment takes over **Text > Hard Wrap…** only for
-Markdown documents. It asks for a width, remembers your answer, and rewraps the
-selection or document. For other document types, BBEdit behaves normally.
-
-```sh
-make install-hard-wrap
-```
-
-Its modifiers mirror BBEdit's own menu behavior:
-
-- Use **Text > Hard Wrap** to rewrap immediately using the remembered width.
-- Hold Shift to bypass Rewrap Markdown and run BBEdit's built-in command.
-
-Remove the optional attachment with `make uninstall-hard-wrap`.
+For a deliberately excessive tour, compare the
+[unwrapped demo document](Samples/gfm_supported_unwrapped.md) with the
+[wrapped demo document](Samples/gfm_supported_wrapped.md).
 
 ## Install
 
@@ -119,7 +88,7 @@ The easiest installation is the universal macOS package from the
 [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
 Its Customize screen offers:
 
-- **Markdown-aware Hard Wrap**, selected by default;
+- **Markdown-aware Hard Wrap for BBEdit**, selected by default;
 - **BBEdit Text Filter**, optional;
 - **Command-line link** at `/usr/local/bin/rewrap-markdown`, optional.
 
@@ -161,7 +130,8 @@ install -m 755 \
 
 `~/.local/bin` is the default installation directory because it is stable,
 per-user, and does not require administrator access. If it is not already on
-your shell path, add this to `~/.zprofile`:
+your shell path, add this to `~/.zprofile` when using Zsh or
+`~/.bash_profile` when using Bash:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -180,12 +150,23 @@ make install-cli
 `make install-cli` builds a release executable and copies it to
 `~/.local/bin/rewrap-markdown`. It does not require BBEdit.
 
+#### BBEdit Integrations
+
 For BBEdit, use `make install` instead. It installs the executable and the
 standard text filter. The filter points to the installed executable, so it
 keeps working if the source checkout is moved or deleted.
 
-Developer-users can install both BBEdit integrations with `make install-all`
-and remove them plus the command-line executable with `make uninstall-all`.
+The filter uses a width of 70 by default. Choose another width when installing
+it with:
+
+```sh
+FILTER_WIDTH=80 make install
+```
+
+Install the Markdown-aware Hard Wrap integration with
+`make install-hard-wrap`, or install both BBEdit integrations with
+`make install-all`. Remove Hard Wrap with `make uninstall-hard-wrap`, or remove
+both integrations and the executable with `make uninstall-all`.
 
 Override the executable directory or BBEdit support folder when needed:
 
@@ -198,24 +179,51 @@ Use a directory your account can write to. Running the entire target with
 `sudo` is not recommended because the BBEdit integration is installed for the
 current user.
 
-## Markdown It Understands
+## Command Line
 
-Rewrap Markdown handles ordinary paragraphs plus the places where wrapping is
-easy to get subtly wrong:
+Wrap a document at 80 columns:
 
-- ordered, unordered, nested, and task lists;
-- blockquotes and quoted lists;
-- GitHub alert blocks;
-- footnote definitions;
-- inline links, images, autolinks, bare URLs, and code spans;
-- backslash and two-space hard line breaks.
+```sh
+rewrap-markdown 80 < draft.md > draft-wrapped.md
+```
 
-It leaves structural content alone, including headings, reference definitions,
-tables, fenced and indented code, HTML blocks, comments, and thematic breaks.
+Or rewrap text on the macOS clipboard:
 
-For a deliberately excessive tour, compare
-[the unwrapped demo](Samples/gfm_supported_unwrapped.md) with
-[the wrapped result](Samples/gfm_supported_wrapped.md).
+```sh
+pbpaste | rewrap-markdown 72 | pbcopy
+```
+
+The width is chosen in this order:
+
+1. First command-line argument
+2. `MD_REWRAP_WIDTH` (environment variable)
+3. Default width of `70`
+
+Use `rewrap-markdown --version` or `rewrap-markdown -v` to print the version.
+
+## BBEdit
+
+Rewrap Markdown offers two BBEdit workflows.
+
+### Rewrap Markdown Text Filter
+
+The text filter adds **Text > Apply Text Filter > Rewrap Markdown**. It filters
+the selection, or the entire document when nothing is selected, at a configured
+width of 70 by default.
+
+To change the preferred width after installing the filter, hold the option key
+when you choose the filter, then edit the `WRAP_WIDTH` variable.
+
+### Markdown-Aware Hard Wrap
+
+The menu attachment takes over **Text > Hard Wrap…** only for Markdown
+documents. It asks for a width, remembers your answer, and rewraps the selection
+or document. For other document types, BBEdit behaves normally.
+
+Its modifiers mirror BBEdit's own menu behavior:
+
+- Use **Text > Hard Wrap** to rewrap immediately using the remembered width.
+- Hold Shift to bypass Rewrap Markdown and run BBEdit's built-in command.
 
 ## Other Editors
 
@@ -250,11 +258,11 @@ make dist
 The wrapping engine lives in `RewrapMarkdownCore`, separate from the
 stdin/stdout executable.
 
-The test suite runs shared compatibility cases against the Swift implementation
-and the original Python reference implementation.
+The Swift implementation was ported from a Python-based text filter by the same
+author. The test suite runs shared compatibility cases against both versions.
 
-My original Python script remains available at `Reference/rewrap_markdown.py`
-for comparison and experimentation; it is no longer the main installation path.
+The Python script remains available at `Reference/rewrap_markdown.py` for
+comparison and experimentation; it is no longer the main installation path.
 
 ## License
 
