@@ -108,22 +108,22 @@ Its modifiers mirror BBEdit's own menu behavior:
 
 Remove the optional attachment with `make uninstall-hard-wrap`.
 
-The Hard Wrap integration is currently available from source and is planned
-for the 0.2 release.
-
 ## Install
 
-### macOS Installer (0.2)
+Rewrap Markdown requires macOS 12 or later. The BBEdit integrations have been
+tested with BBEdit 15.5.5.
 
-Starting with 0.2, the easiest installation is the universal macOS package
-from the [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
+### macOS Installer
+
+The easiest installation is the universal macOS package from the
+[latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
 Its Customize screen offers:
 
 - **Markdown-aware Hard Wrap**, selected by default;
 - **BBEdit Text Filter**, optional;
 - **Command-line link** at `/usr/local/bin/rewrap-markdown`, optional.
 
-The 0.2 installer is unsigned. After trying to open it, macOS may block it
+The installer is unsigned. After trying to open it, macOS may block it
 because it cannot verify the developer. Open **System Settings > Privacy &
 Security**, scroll to Security, click **Open Anyway** for the Rewrap Markdown
 installer, authenticate, and confirm **Open**. Only bypass this warning for an
@@ -148,10 +148,10 @@ sudo "/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
 
 Download the binary for your Mac from the
 [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
-For the current 0.1 release:
+For the current 0.2 release:
 
 ```sh
-VERSION=0.1
+VERSION=0.2
 ARCH=$(uname -m)
 mkdir -p "$HOME/.local/bin"
 install -m 755 \
@@ -165,16 +165,6 @@ your shell path, add this to `~/.zprofile`:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
-```
-
-For BBEdit 0.1 integration, also download `Rewrap-Markdown-Swift` from the
-release and install it as a text filter:
-
-```sh
-mkdir -p "$HOME/Library/Application Support/BBEdit/Text Filters"
-install -m 755 \
-  "$HOME/Downloads/Rewrap-Markdown-Swift" \
-  "$HOME/Library/Application Support/BBEdit/Text Filters/Rewrap Markdown"
 ```
 
 ### Build From Source

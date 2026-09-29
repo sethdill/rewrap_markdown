@@ -18,6 +18,7 @@ Before a release, update:
 - `RewrapMarkdown.version` in `Sources/RewrapMarkdownCore/RewrapMarkdown.swift`
 - `VERSION` in `Reference/rewrap_markdown.py`
 - the current version note in `README.md`
+- `RELEASE_NOTES.md`
 
 The test suite checks that the implementations report the version from
 `VERSION`.
@@ -58,6 +59,10 @@ The workflow also uploads:
 - `Rewrap-Markdown-Swift`
 - `Markdown-Hard-Wrap-Menu-Action.applescript`
 
+Before opening the release pull request, run the `Release` workflow manually
+from the release branch with **Publish** disabled and leave **Tag** empty. This
+builds the release-candidate artifacts without creating a GitHub Release.
+
 The installer is currently unsigned and not notarized. Before publishing a
 release, download the Actions-built package to a Mac and perform this manual
 Gatekeeper test:
@@ -79,11 +84,11 @@ configured to point at it.
 
 ## Tagging
 
-For version `0.1`, tag the release as:
+For version `0.2`, tag the tested merge commit as:
 
 ```sh
-git tag v0.1
-git push origin main v0.1
+git tag v0.2
+git push origin main v0.2
 ```
 
 Pushing the tag runs the release workflow. If the GitHub Release already exists,
@@ -91,4 +96,4 @@ the workflow uploads or replaces the assets. If the release does not exist, the
 workflow creates it.
 
 For a tag that already exists, run the `Release` workflow manually from GitHub
-Actions and enter the tag name, such as `v0.1`.
+Actions, enable **Publish**, and enter the tag name, such as `v0.2`.

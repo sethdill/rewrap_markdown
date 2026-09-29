@@ -4,7 +4,8 @@ Run `make pkg-unsigned` to build the local installer prototype in `dist/`.
 The product package contains four components:
 
 - **Core** is required and hidden. It installs the executable in
-  `/Library/Application Support/Rewrap Markdown/`.
+  `/Library/Application Support/Rewrap Markdown/` together with the project
+  license and notice.
 - **Markdown-aware Hard Wrap** is selected by default. It installs the
   compiled menu attachment in the current user's BBEdit support folder.
 - **BBEdit Text Filter** is not selected by default. It installs

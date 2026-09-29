@@ -42,9 +42,15 @@ expected_command_line=0
 pkgutil --expand-full "$package" "$expanded"
 binary="$expanded/core.pkg/Payload/Library/Application Support/Rewrap Markdown/rewrap-markdown"
 uninstaller="$expanded/core.pkg/Payload/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
+license="$expanded/core.pkg/Payload/Library/Application Support/Rewrap Markdown/LICENSE"
+notice="$expanded/core.pkg/Payload/Library/Application Support/Rewrap Markdown/NOTICE"
+installer_license="$expanded/Resources/LICENSE.txt"
 
 [ -x "$binary" ]
 [ -x "$uninstaller" ]
+[ -f "$license" ]
+[ -f "$notice" ]
+[ -f "$installer_license" ]
 lipo "$binary" -verify_arch $expected_archs
 "$binary" --version
 printf '%s\n' 'A long Markdown paragraph that verifies the packaged executable can wrap its input.' | "$binary" 40 >/dev/null

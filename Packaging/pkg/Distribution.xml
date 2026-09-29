@@ -5,6 +5,7 @@
     <product id="com.sethdillingham.rewrap-markdown" version="@VERSION@"/>
     <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
     <options customize="always" require-scripts="false" rootVolumeOnly="true" hostArchitectures="@ARCH@"/>
+    <license file="LICENSE.txt"/>
 
     <script><![CDATA[
         function componentWasInstalled(path) {

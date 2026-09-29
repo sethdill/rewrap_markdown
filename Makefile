@@ -18,6 +18,7 @@ DIST_BBEDIT_HARD_WRAP := $(DIST_DIR)/Markdown-Hard-Wrap-Menu-Action.applescript
 PKG_IDENTIFIER ?= com.sethdillingham.rewrap-markdown
 PKG_BUILD_DIR := .build/installer
 PKG_COMPONENTS_DIR := $(PKG_BUILD_DIR)/components
+PKG_RESOURCES_DIR := $(PKG_BUILD_DIR)/resources
 PKG_ROOTS_DIR := $(PKG_BUILD_DIR)/roots
 PKG_CORE_ROOT := $(PKG_ROOTS_DIR)/core
 PKG_HARD_WRAP_ROOT := $(PKG_ROOTS_DIR)/hard-wrap
@@ -78,9 +79,11 @@ package-unsigned:
 	mkdir -p "$(PKG_TEXT_FILTER_PACKAGE)/Contents/Text Filters"
 	mkdir -p "$(PKG_COMMAND_LINE_ROOT)/usr/local/bin"
 	mkdir -p "$(PKG_COMMAND_LINE_ROOT)/$(PKG_SHARED_DIR)/Components/Command Line"
-	mkdir -p "$(PKG_HARD_WRAP_SCRIPTS)" "$(PKG_TEXT_FILTER_SCRIPTS)" "$(PKG_COMPONENTS_DIR)"
+	mkdir -p "$(PKG_HARD_WRAP_SCRIPTS)" "$(PKG_TEXT_FILTER_SCRIPTS)" "$(PKG_COMPONENTS_DIR)" "$(PKG_RESOURCES_DIR)"
 	cp "$(RELEASE_BINARY)" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/rewrap-markdown"
 	chmod +x "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/rewrap-markdown"
+	cp LICENSE NOTICE "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/"
+	cp LICENSE "$(PKG_RESOURCES_DIR)/LICENSE.txt"
 	cp "Packaging/pkg/uninstall-rewrap-markdown" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/uninstall-rewrap-markdown"
 	cp "Packaging/pkg/resolve-user.sh" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/Components/Installer/resolve-user.sh"
 	chmod +x "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/uninstall-rewrap-markdown"
@@ -111,7 +114,7 @@ package-unsigned:
 	sed -e 's/@VERSION@/$(VERSION)/g' -e 's/@ARCH@/$(PKG_ARCHS)/g' "Packaging/pkg/Distribution.xml" > "$(PKG_DISTRIBUTION)"
 	mkdir -p "$(DIST_DIR)"
 	rm -f "$(DIST_INSTALLER)"
-	productbuild --distribution "$(PKG_DISTRIBUTION)" --package-path "$(PKG_COMPONENTS_DIR)" "$(DIST_INSTALLER)"
+	productbuild --distribution "$(PKG_DISTRIBUTION)" --resources "$(PKG_RESOURCES_DIR)" --package-path "$(PKG_COMPONENTS_DIR)" "$(DIST_INSTALLER)"
 	@echo "Created unsigned installer: $(DIST_INSTALLER)"
 
 install-cli: release

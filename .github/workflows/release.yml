@@ -7,8 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish, such as v0.1"
-        required: true
+        description: "Tag to build, such as v0.2; leave empty to build the selected branch"
+        required: false
+      publish:
+        description: "Publish or update the GitHub Release for the tag"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -101,6 +106,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: [build-macos, package-macos]
+    if: github.event_name == 'push' || (inputs.publish && inputs.tag != '')
     runs-on: ubuntu-latest
 
     steps:
@@ -131,6 +137,7 @@ jobs:
           title="Rewrap Markdown ${TAG_NAME#v}"
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
             gh release upload "$TAG_NAME" dist/* --clobber
+            gh release edit "$TAG_NAME" --title "$title" --notes-file RELEASE_NOTES.md
           else
-            gh release create "$TAG_NAME" dist/* --verify-tag --title "$title" --generate-notes
+            gh release create "$TAG_NAME" dist/* --verify-tag --title "$title" --notes-file RELEASE_NOTES.md
           fi
