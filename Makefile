@@ -15,6 +15,7 @@ DIST_BINARY := $(DIST_DIR)/$(PRODUCT)-$(VERSION)-macos-$(ARCH)
 DIST_PYTHON := $(DIST_DIR)/$(PRODUCT)-$(VERSION).py
 DIST_BBEDIT_SWIFT := $(DIST_DIR)/Rewrap Markdown (Swift)
 DIST_BBEDIT_HARD_WRAP := $(DIST_DIR)/Markdown-Hard-Wrap-Menu-Action.applescript
+DIST_GIT_COMMIT_MSG := $(DIST_DIR)/rewrap-markdown-commit-msg
 PKG_IDENTIFIER ?= com.sethdillingham.rewrap-markdown
 PKG_BUILD_DIR := .build/installer
 PKG_COMPONENTS_DIR := $(PKG_BUILD_DIR)/components
@@ -65,9 +66,10 @@ dist: test-executable
 	cp Reference/rewrap_markdown.py "$(DIST_PYTHON)"
 	cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "$(DIST_BBEDIT_SWIFT)"
 	cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "$(DIST_BBEDIT_HARD_WRAP)"
-	chmod +x "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)"
+	cp "Distribution/Git/commit-msg" "$(DIST_GIT_COMMIT_MSG)"
+	chmod +x "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)" "$(DIST_GIT_COMMIT_MSG)"
 	@echo "Created release artifacts in $(DIST_DIR):"
-	@printf '  %s\n' "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)" "$(DIST_BBEDIT_HARD_WRAP)"
+	@printf '  %s\n' "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)" "$(DIST_BBEDIT_HARD_WRAP)" "$(DIST_GIT_COMMIT_MSG)"
 
 pkg-unsigned: test-executable package-unsigned
 

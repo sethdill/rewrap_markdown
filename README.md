@@ -181,6 +181,8 @@ current user.
 
 ## Command Line
 
+### Wrap Markdown
+
 Wrap a document at 80 columns:
 
 ```sh
@@ -193,13 +195,49 @@ Or rewrap text on the macOS clipboard:
 pbpaste | rewrap-markdown 72 | pbcopy
 ```
 
+### Unwrap Markdown
+
+Join each paragraph and list item onto one line before pasting Markdown into a
+GitHub comment, Jira, Slack, or a web form:
+
+```sh
+rewrap-markdown --unwrap < draft.md > draft-unwrapped.md
+```
+
+Width `0` is equivalent to `--unwrap`. Markdown structure, protected blocks,
+and intentional hard line breaks are preserved.
+
+### Commit Messages
+
+Rewrap a commit message while leaving its subject line, `#` comment lines, and
+final Git trailer block unchanged:
+
+```sh
+rewrap-markdown --commit < message.txt > message-wrapped.txt
+```
+
+Commit message bodies default to 72 columns. Supply a different width as a
+numeric argument, or use `--commit --unwrap` to join each body paragraph without
+changing the protected parts of the message.
+
+To rewrap every commit message in a repository, install the included hook:
+
+```sh
+install -m 755 Distribution/Git/commit-msg .git/hooks/commit-msg
+```
+
+The hook rewrites Git's message file only after `rewrap-markdown --commit`
+succeeds. Set `REWRAP_MARKDOWN` in the hook environment if the executable is not
+on Git's command path.
+
 The width is chosen in this order:
 
-1. First command-line argument
+1. Numeric command-line argument
 2. `MD_REWRAP_WIDTH` (environment variable)
-3. Default width of `70`
+3. Default width of `70`, or `72` in commit message mode
 
-Use `rewrap-markdown --version` or `rewrap-markdown -v` to print the version.
+Use `rewrap-markdown --help` to see the available modes, or
+`rewrap-markdown --version` to print the version.
 
 ## BBEdit
 

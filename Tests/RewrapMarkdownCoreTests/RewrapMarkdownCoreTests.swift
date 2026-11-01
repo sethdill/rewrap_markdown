@@ -23,6 +23,147 @@ final class RewrapMarkdownCoreTests: XCTestCase {
         }
     }
 
+    func testUnwrapRoundTripsCanonicalWrappedMarkdown() {
+        for testCase in compatibilityCases {
+            let wrapped = RewrapMarkdown.rewrap(testCase.input, width: testCase.width)
+            let unwrapped = RewrapMarkdown.rewrap(wrapped, width: 0)
+
+            XCTAssertEqual(
+                RewrapMarkdown.rewrap(unwrapped, width: testCase.width),
+                wrapped,
+                testCase.name
+            )
+        }
+    }
+
+    func testWidthZeroSelectsUnwrapMode() {
+        XCTAssertEqual(
+            RewrapMarkdown.width(arguments: ["0"], environment: [:]),
+            0
+        )
+        XCTAssertEqual(
+            RewrapMarkdown.width(arguments: [], environment: ["MD_REWRAP_WIDTH": "0"]),
+            0
+        )
+    }
+
+    func testUnwrapPreservesMarkdownStructure() {
+        let input = """
+        This paragraph has been
+        wrapped across several
+        source lines.
+
+        - This list item has a
+          continuation line.
+          - This nested item also
+            has a continuation.
+        - This item stays separate.
+
+        > This quoted paragraph
+        > has two source lines.
+
+        This line has a hard break\u{20}\u{20}
+        and this line continues
+        after that break.
+
+        ```swift
+        let value = "code remains exactly as written"
+        ```
+
+        """
+
+        let expected = """
+        This paragraph has been wrapped across several source lines.
+
+        - This list item has a continuation line.
+          - This nested item also has a continuation.
+        - This item stays separate.
+
+        > This quoted paragraph has two source lines.
+
+        This line has a hard break\u{20}\u{20}
+        and this line continues after that break.
+
+        ```swift
+        let value = "code remains exactly as written"
+        ```
+
+        """
+
+        XCTAssertEqual(RewrapMarkdown.rewrap(input, width: 0), expected)
+    }
+
+    func testCommitMessageModePreservesSpecialRegions() {
+        let input = """
+        A subject line that is intentionally much longer than the body width
+
+        This commit body was manually
+        wrapped and should be reflowed to
+        the requested width without changing the subject.
+
+        # This comment line must remain exactly as written even when it is long.
+        Another body paragraph follows the comment and should be wrapped independently.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+        Co-authored-by: Example Person <example@example.com>
+         continuation text that belongs to the trailer
+
+        """
+
+        let expected = """
+        A subject line that is intentionally much longer than the body width
+
+        This commit body was manually
+        wrapped and should be reflowed to
+        the requested width without
+        changing the subject.
+
+        # This comment line must remain exactly as written even when it is long.
+        Another body paragraph follows the
+        comment and should be wrapped
+        independently.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+        Co-authored-by: Example Person <example@example.com>
+         continuation text that belongs to the trailer
+
+        """
+
+        XCTAssertEqual(
+            RewrapMarkdown.rewrapCommitMessage(input, width: 34),
+            expected
+        )
+    }
+
+    func testCommitMessageDefaultWidth() {
+        XCTAssertEqual(RewrapMarkdown.defaultCommitMessageWidth, 72)
+    }
+
+    func testCommitMessageCanUnwrapOnlyItsBody() {
+        let input = """
+        Subject remains exactly as written
+
+        This body is split
+        across source lines.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+        let expected = """
+        Subject remains exactly as written
+
+        This body is split across source lines.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+
+        XCTAssertEqual(
+            RewrapMarkdown.rewrapCommitMessage(input, width: 0),
+            expected
+        )
+    }
+
     func testPythonOriginalMatchesSharedCases() throws {
         let pythonFilter = try originalPythonFilterPath()
 
@@ -47,6 +188,70 @@ final class RewrapMarkdownCoreTests: XCTestCase {
         }
     }
 
+    func testPythonReportsNewModesInHelp() throws {
+        let pythonFilter = try originalPythonFilterPath()
+        let output = try runProcess(
+            "/usr/bin/env",
+            arguments: ["python3", pythonFilter, "--help"],
+            input: ""
+        )
+
+        XCTAssertTrue(output.contains("--unwrap"))
+        XCTAssertTrue(output.contains("--commit"))
+    }
+
+    func testPythonUnwrapModes() throws {
+        let pythonFilter = try originalPythonFilterPath()
+        let input = "This paragraph is\nwrapped across lines.\n"
+        let expected = "This paragraph is wrapped across lines.\n"
+
+        for arguments in [["--unwrap"], ["0"]] {
+            XCTAssertEqual(
+                try runProcess(
+                    "/usr/bin/env",
+                    arguments: ["python3", pythonFilter] + arguments,
+                    input: input
+                ),
+                expected
+            )
+        }
+    }
+
+    func testPythonCommitMessageMode() throws {
+        let pythonFilter = try originalPythonFilterPath()
+        let input = """
+        This subject remains long and unchanged
+
+        This body text should wrap at the explicitly requested width.
+
+        # Keep this comment exactly as written.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+        let expected = """
+        This subject remains long and unchanged
+
+        This body text should
+        wrap at the explicitly
+        requested width.
+
+        # Keep this comment exactly as written.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+
+        XCTAssertEqual(
+            try runProcess(
+                "/usr/bin/env",
+                arguments: ["python3", pythonFilter, "--commit", "24"],
+                input: input
+            ),
+            expected
+        )
+    }
+
     func testSwiftExecutableMatchesSharedCases() throws {
         let executable = try swiftExecutablePath()
 
@@ -69,6 +274,111 @@ final class RewrapMarkdownCoreTests: XCTestCase {
                 expected
             )
         }
+    }
+
+    func testSwiftExecutableReportsNewModesInHelp() throws {
+        let executable = try swiftExecutablePath()
+        let output = try runProcess(executable, arguments: ["--help"], input: "")
+
+        XCTAssertTrue(output.contains("--unwrap"))
+        XCTAssertTrue(output.contains("--commit"))
+    }
+
+    func testSwiftExecutableUnwrapModes() throws {
+        let executable = try swiftExecutablePath()
+        let input = "This paragraph is\nwrapped across lines.\n"
+        let expected = "This paragraph is wrapped across lines.\n"
+
+        for arguments in [["--unwrap"], ["0"]] {
+            XCTAssertEqual(
+                try runProcess(executable, arguments: arguments, input: input),
+                expected
+            )
+        }
+    }
+
+    func testSwiftExecutableCommitMessageMode() throws {
+        let executable = try swiftExecutablePath()
+        let input = """
+        This subject remains long and unchanged
+
+        This body text should wrap at the explicitly requested width.
+
+        # Keep this comment exactly as written.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+        let expected = """
+        This subject remains long and unchanged
+
+        This body text should
+        wrap at the explicitly
+        requested width.
+
+        # Keep this comment exactly as written.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+
+        XCTAssertEqual(
+            try runProcess(executable, arguments: ["--commit", "24"], input: input),
+            expected
+        )
+    }
+
+    func testCommitMessageHookRewritesOnlyAfterSuccess() throws {
+        let executable = try swiftExecutablePath()
+        let hook = projectRoot()
+            .appendingPathComponent("Distribution/Git/commit-msg")
+            .path
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let message = temporaryDirectory.appendingPathComponent("COMMIT_EDITMSG")
+        let input = """
+        Subject stays as written
+
+        This body starts on
+        more than one line.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+        let expected = """
+        Subject stays as written
+
+        This body starts on more than one line.
+
+        Signed-off-by: Seth Dillingham <seth@example.com>
+
+        """
+        try input.write(to: message, atomically: true, encoding: .utf8)
+
+        XCTAssertEqual(
+            try runHook(hook, message: message.path, executable: executable),
+            0
+        )
+        XCTAssertEqual(
+            try String(contentsOf: message, encoding: .utf8),
+            expected
+        )
+
+        try input.write(to: message, atomically: true, encoding: .utf8)
+        XCTAssertNotEqual(
+            try runHook(hook, message: message.path, executable: "/does/not/exist"),
+            0
+        )
+        XCTAssertEqual(
+            try String(contentsOf: message, encoding: .utf8),
+            input
+        )
     }
 }
 
@@ -274,4 +584,19 @@ private func runProcess(_ launchPath: String, arguments: [String], input: String
 
     XCTAssertEqual(process.terminationStatus, 0, stderr)
     return String(data: output, encoding: .utf8) ?? ""
+}
+
+private func runHook(_ hook: String, message: String, executable: String) throws -> Int32 {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    process.arguments = [hook, message]
+    var environment = ProcessInfo.processInfo.environment
+    environment["REWRAP_MARKDOWN"] = executable
+    process.environment = environment
+    process.standardOutput = Pipe()
+    process.standardError = Pipe()
+
+    try process.run()
+    process.waitUntilExit()
+    return process.terminationStatus
 }

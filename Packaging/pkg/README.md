@@ -80,7 +80,7 @@ reinstallation.
 Run the package verifier after building:
 
 ```sh
-Packaging/pkg/verify-installer.sh dist/rewrap-markdown-0.2-unsigned.pkg
+Packaging/pkg/verify-installer.sh "dist/rewrap-markdown-$(cat VERSION)-unsigned.pkg"
 ```
 
 It checks the component choices, expanded payload, installer scripts,

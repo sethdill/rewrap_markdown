@@ -37,6 +37,7 @@ This creates:
 - `dist/rewrap-markdown-VERSION.py`
 - `dist/Rewrap Markdown (Swift)`
 - `dist/Markdown-Hard-Wrap-Menu-Action.applescript`
+- `dist/rewrap-markdown-commit-msg`
 
 Build and verify a local unsigned installer with:
 
@@ -58,6 +59,7 @@ The workflow also uploads:
 - `rewrap-markdown-VERSION.py`
 - `Rewrap-Markdown-Swift`
 - `Markdown-Hard-Wrap-Menu-Action.applescript`
+- `rewrap-markdown-commit-msg`
 
 Before opening the release pull request, run the `Release` workflow manually
 from the release branch with **Publish** disabled and leave **Tag** empty. This
@@ -84,11 +86,11 @@ configured to point at it.
 
 ## Tagging
 
-For version `0.2`, tag the tested merge commit as:
+For version `0.3`, tag the tested merge commit as:
 
 ```sh
-git tag v0.2
-git push origin main v0.2
+git tag v0.3
+git push origin main v0.3
 ```
 
 Pushing the tag runs the release workflow. If the GitHub Release already exists,
@@ -96,4 +98,4 @@ the workflow uploads or replaces the assets. If the release does not exist, the
 workflow creates it.
 
 For a tag that already exists, run the `Release` workflow manually from GitHub
-Actions, enable **Publish**, and enter the tag name, such as `v0.2`.
+Actions, enable **Publish**, and enter the tag name, such as `v0.3`.

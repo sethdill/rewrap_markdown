@@ -127,7 +127,8 @@ jobs:
           cp Reference/rewrap_markdown.py "dist/rewrap-markdown-${version}.py"
           cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "dist/Rewrap-Markdown-Swift"
           cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "dist/Markdown-Hard-Wrap-Menu-Action.applescript"
-          chmod +x "dist/rewrap-markdown-${version}.py" "dist/Rewrap-Markdown-Swift"
+          cp "Distribution/Git/commit-msg" "dist/rewrap-markdown-commit-msg"
+          chmod +x "dist/rewrap-markdown-${version}.py" "dist/Rewrap-Markdown-Swift" "dist/rewrap-markdown-commit-msg"
 
       - name: Publish assets
         env:
