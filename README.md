@@ -258,6 +258,9 @@ The menu attachment takes over **Text > Hard Wrap…** only for Markdown
 documents. It asks for a width, remembers your answer, and rewraps the selection
 or document. For other document types, BBEdit behaves normally.
 
+Enter `0` for the width to unwrap each paragraph and list item onto one line.
+The remembered value also works with **Text > Hard Wrap** for immediate unwraps.
+
 Its modifiers mirror BBEdit's own menu behavior:
 
 - Use **Text > Hard Wrap** to rewrap immediately using the remembered width.

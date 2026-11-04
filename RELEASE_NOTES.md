@@ -7,7 +7,7 @@ messages without disturbing their special structure.
 
 - **Unwrap mode:** `--unwrap`, or width `0`, joins each paragraph and list item
   onto one line while preserving Markdown structure and intentional hard
-  breaks.
+  breaks. BBEdit's Markdown-aware Hard Wrap dialog also accepts `0`.
 - **Commit message mode:** `--commit` leaves the subject, `#` comment lines, and
   final Git trailer block unchanged while rewrapping the body at 72 columns by
   default.
