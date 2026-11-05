@@ -13,6 +13,12 @@ messages without disturbing their special structure.
   default.
 - **Commit hook:** The release includes a `commit-msg` hook that safely rewrites
   a message only after the filter succeeds.
+- **Linux command-line support:** Swift and Python support wrapping, `--unwrap`,
+  `--commit`, and the `commit-msg` hook on Linux. Release binaries for x86_64
+  and aarch64 are statically linked with Swift's official Static Linux SDK and
+  include SHA-256 files. Both architectures are tested natively with Ubuntu
+  22.04/24.04, Debian 12, and Alpine 3.22 userlands; other Linux environments
+  have not been validated. BBEdit and the installer remain macOS-only.
 - **Discoverable CLI:** `--help` describes the available modes.
 
 Both new modes are available in the Swift executable and Python implementation.

@@ -1,0 +1,43 @@
+name: Verify published Linux installation
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag to download and test (v0.3 or later)'
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: Install published release on Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Download published binary, checksum, and hook
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          binary="rewrap-markdown-$(cat VERSION)-linux-$ARCH"
+          gh release download "$RELEASE_TAG" --dir artifact \
+            --pattern "$binary" --pattern "$binary.sha256" \
+            --pattern rewrap-markdown-commit-msg
+      - name: Follow README installation, test through PATH, and remove
+        run: sh scripts/linux-install-smoke.sh artifact

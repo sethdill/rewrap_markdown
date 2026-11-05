@@ -31,13 +31,19 @@ Create local release artifacts with:
 make dist
 ```
 
-This creates:
+On macOS this creates:
 
 - `dist/rewrap-markdown-VERSION-macos-ARCH`
 - `dist/rewrap-markdown-VERSION.py`
 - `dist/Rewrap Markdown (Swift)`
 - `dist/Markdown-Hard-Wrap-Menu-Action.applescript`
 - `dist/rewrap-markdown-commit-msg`
+
+On Linux, `make dist` stages a native `linux-ARCH` executable plus the Python
+script and Git hook; it excludes BBEdit files. These native builds are not
+necessarily portable to another distribution. `make dist-cli` stages only this
+portable target set on either platform. Installer and BBEdit targets require
+macOS.
 
 Build and verify a local unsigned installer with:
 
@@ -52,10 +58,52 @@ current machine architecture. The GitHub Actions release workflow builds both:
 - `rewrap-markdown-VERSION-macos-x86_64`
 - `rewrap-markdown-VERSION-macos-arm64`
 
+Linux CI first runs `make test-executable` on native x86_64 and aarch64 runners,
+covering the Swift core, CLI, Python compatibility cases, and hook safety. The
+reusable `linux-release.yml` workflow builds with Swift 6.2.1 and the matching
+[official Static Linux SDK](https://www.swift.org/documentation/articles/static-linux-getting-started.html).
+Its SDK URL and SHA-256 are pinned in that workflow, using Swift.org's release
+metadata. To reproduce, install that toolchain and SDK, then run:
+
+```sh
+make dist-linux LINUX_ARCH=x86_64
+make dist-linux LINUX_ARCH=aarch64
+```
+
+This produces `rewrap-markdown-VERSION-linux-x86_64` and
+`rewrap-markdown-VERSION-linux-aarch64`, each with a `.sha256` file. SHA files
+contain the basename so `sha256sum -c BINARY.sha256` works after downloading.
+The build requires Make and `shasum` (on Debian/Ubuntu: `libdigest-sha-perl`).
+SDK and toolchain versions must match; use the open-source toolchain rather
+than Xcode's compiler for static cross-compilation.
+
+The workflow rejects ELF interpreters and shared-library dependencies, runs the
+full compatibility suite against each produced binary, then downloads the
+artifacts into separate runtime tests. Both architectures execute natively
+inside Ubuntu 22.04/24.04, Debian 12, and Alpine 3.22 containers without Swift.
+Smoke tests verify checksums, wrap/unwrap, Unicode, protected Markdown, commit
+mode, and successful/failing hooks invoked by Git for both implementations.
+This is userland coverage on GitHub-hosted kernels, not a test of every distro
+kernel or every Linux distribution.
+
+Separate native Ubuntu VM jobs on x86_64 and aarch64 follow the README's
+installation steps: verify the downloaded checksum, install into
+`~/.local/bin`, invoke the command through `PATH` from outside the checkout,
+exercise wrapping/unwrapping/commit mode and the installed Git hook, then remove
+the binary and confirm it is no longer available. They also reject a deliberately
+corrupted download before installation. These jobs run without a job container
+and are required by the reusable release workflow alongside the distro tests.
+
+The `Linux` workflow runs on pull requests and builds these same artifacts. The
+`Release` workflow reuses the build and smoke jobs and waits for them before
+publishing, alongside the unchanged macOS installer pipeline.
+
 The workflow also uploads:
 
 - `rewrap-markdown-VERSION-unsigned.pkg`, universal for Intel and Apple Silicon
 - `rewrap-markdown-VERSION-unsigned.pkg.sha256`
+- `rewrap-markdown-VERSION-linux-x86_64` and its `.sha256`
+- `rewrap-markdown-VERSION-linux-aarch64` and its `.sha256`
 - `rewrap-markdown-VERSION.py`
 - `Rewrap-Markdown-Swift`
 - `Markdown-Hard-Wrap-Menu-Action.applescript`
@@ -64,6 +112,27 @@ The workflow also uploads:
 Before opening the release pull request, run the `Release` workflow manually
 from the release branch with **Publish** disabled and leave **Tag** empty. This
 builds the release-candidate artifacts without creating a GitHub Release.
+
+Before publishing Linux binaries, confirm the build and every runtime smoke job
+and native installation jobs passed for the exact release commit. A separate
+Linux host is not required for these checks. Older kernels and distributions
+outside the CI matrix remain unvalidated; test them before extending the
+compatibility claim.
+
+After publishing v0.3 or later, run **Actions > Verify published Linux
+installation > Run workflow**, selecting the release tag as the **tag** input.
+This downloads the actual GitHub Release binary, checksum, and commit-msg hook
+on both architectures, then runs the same installation/removal test. It only
+reads release assets and does not publish or modify a release. The workflow
+must be present on the default branch for manual dispatch, and the selected
+release tag must include the installation test scripts. For example:
+
+```sh
+gh workflow run linux-install.yml --ref main -f tag=v0.3
+```
+
+This final download-to-install check can only run after the release assets
+exist; the pre-publication jobs exercise the exact workflow artifacts instead.
 
 The installer is currently unsigned and not notarized. Before publishing a
 release, download the Actions-built package to a Mac and perform this manual

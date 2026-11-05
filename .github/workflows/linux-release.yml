@@ -1,0 +1,125 @@
+name: Linux release binaries
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Source ref (empty uses the calling workflow commit)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Static Linux ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    container: swift:6.2.1-jammy
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - name: Install build and test dependencies
+        run: apt-get update && apt-get install -y python3 make libdigest-sha-perl file binutils curl
+      - name: Install official Static Linux SDK (matching Swift 6.2.1)
+        run: |
+          # Download separately: Swift 6.2.1's URLSession cleanup can crash on
+          # aarch64 after a remote SDK installation has otherwise succeeded.
+          sdk=swift-6.2.1-RELEASE_static-linux-0.0.1.artifactbundle.tar.gz
+          curl --fail --location --retry 3 --output "/tmp/$sdk" \
+            "https://download.swift.org/swift-6.2.1-release/static-sdk/swift-6.2.1-RELEASE/$sdk"
+          echo "08e1939a504e499ec871b36826569173103e4562769e12b9b8c2a50f098374ad  /tmp/$sdk" | sha256sum -c -
+          swift sdk install "/tmp/$sdk"
+      - name: Build static binary and checksum
+        run: make dist-linux LINUX_ARCH=${{ matrix.arch }}
+      - name: Verify static ELF and run full compatibility suite against artifact
+        run: |
+          binary="$PWD/dist/rewrap-markdown-$(cat VERSION)-linux-${{ matrix.arch }}"
+          file "$binary"
+          readelf -l "$binary" > /tmp/program-headers
+          readelf -d "$binary" > /tmp/dynamic-section
+          if grep -q INTERP /tmp/program-headers; then
+            echo 'Unexpected ELF interpreter' >&2; exit 1
+          fi
+          if grep -q NEEDED /tmp/dynamic-section; then
+            echo 'Unexpected shared library dependency' >&2; exit 1
+          fi
+          REWRAP_MARKDOWN_EXECUTABLE="$binary" swift test
+          python3 scripts/smoke.py "$binary"
+          python3 scripts/smoke.py python3 Reference/rewrap_markdown.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: rewrap-markdown-linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  smoke:
+    name: Smoke ${{ matrix.arch }} on ${{ matrix.image }}
+    needs: build
+    timeout-minutes: 15
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:22.04, ubuntu:24.04, debian:12-slim, alpine:3.22]
+        # Both architectures run natively; Docker supplies the distro userland.
+        arch: [x86_64, aarch64]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: rewrap-markdown-linux-${{ matrix.arch }}
+          path: artifact
+      - name: Execute downloaded artifact and Python on a runtime-only system
+        env:
+          IMAGE: ${{ matrix.image }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work "$IMAGE" \
+            sh scripts/linux-smoke.sh "$ARCH"
+
+  install:
+    name: Install and remove on Linux ${{ matrix.arch }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: rewrap-markdown-linux-${{ matrix.arch }}
+          path: artifact
+      - name: Stage release hook
+        run: cp Distribution/Git/commit-msg artifact/rewrap-markdown-commit-msg
+      - name: Reject a corrupt download before installation
+        run: |
+          cp -R artifact corrupt-artifact
+          printf 'corrupt download' >> "corrupt-artifact/rewrap-markdown-$(cat VERSION)-linux-${{ matrix.arch }}"
+          if sh scripts/linux-install-smoke.sh corrupt-artifact; then
+            echo 'Checksum validation accepted a corrupt binary' >&2; exit 1
+          fi
+          test ! -e "$HOME/.local/bin/rewrap-markdown"
+      - name: Follow README installation, test through PATH, and remove
+        run: sh scripts/linux-install-smoke.sh artifact
