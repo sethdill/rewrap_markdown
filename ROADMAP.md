@@ -22,7 +22,8 @@ published; 0.3 is in preparation on `release/0.3`.
 - [ ] Pin the final v0.3 release commit and publish the approved tap PR.
 - [ ] Verify `brew install sethdill/tap/rewrap-markdown` from the public tap.
 
-See [the tap handoff](Packaging/homebrew/README.md). Homebrew installs the CLI
+Follow the [v0.3 publishing checklist](RELEASING.md#v03-publishing-checklist)
+when tagging the release. See [the tap handoff](Packaging/homebrew/README.md). Homebrew installs the CLI
 only and never changes BBEdit support folders. The provisional formula is
 staged upstream; the separate tap will own the user-facing installation path.
 

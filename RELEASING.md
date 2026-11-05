@@ -169,17 +169,28 @@ workflow creates it.
 For a tag that already exists, run the `Release` workflow manually from GitHub
 Actions, enable **Publish**, and enter the tag name, such as `v0.3`.
 
-## Homebrew release handoff
+## v0.3 publishing checklist
 
-Homebrew support is staged in `Packaging/homebrew`, with the decision and native
-validation matrix documented in its [README](Packaging/homebrew/README.md).
-After finalizing a release tag, run `scripts/update-homebrew.py` with the public
-version and full release commit SHA. Review the URL, version, and SHA-256 diff;
-run style, strict online audit, installation, functional tests, and linkage on
-both macOS architectures and both Linux architectures. Open a separate tap PR
-only after Seth approves creating/publishing `sethdill/homebrew-tap`. Do not
-claim the public brew command works until the approved tap is published and
-clean-machine installation is verified. There is no automatic tap publishing.
+After pushing `v0.3`, the release owner should complete these follow-ups.
+The GitHub Release and the Homebrew tap ship separately. If tap approval is
+pending when the GitHub Release goes live, leave the Homebrew launch items
+open on the [v0.3 roadmap](ROADMAP.md#homebrew-cli-installation) and keep the
+README's Homebrew status as planned.
+
+- [ ] Confirm the GitHub Release is live and run **Verify published Linux
+  installation** as described under [Build Artifacts](#build-artifacts).
+- [ ] Resolve `v0.3` to its full commit SHA and run `scripts/update-homebrew.py`
+  with version `0.3` and that SHA. Review the resulting version, URL, and SHA-256.
+  Follow the [formula update procedure](Packaging/homebrew/README.md#release-updates-and-separate-repository-handoff).
+- [ ] Run style, strict online audit, source install, formula tests, and linkage
+  on Intel and Apple Silicon macOS and on x86_64 and ARM64 Linux using the final pin.
+- [ ] Obtain Seth's explicit approval to create and publish
+  `sethdill/homebrew-tap`. Transfer the tested formula and open the separate tap
+  PR. Publish it after review and approval.
+- [ ] Verify `brew install sethdill/tap/rewrap-markdown` from clean macOS and
+  Linux environments. Update the project README and roadmap once it works.
+
+## Homebrew maintenance
 
 Never move a published source tag or overwrite an archive to fix a release.
 The formula pins commit archives; a changed digest requires investigation.
