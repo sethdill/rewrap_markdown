@@ -108,11 +108,12 @@ Security**, scroll to Security, click **Open Anyway** for the Rewrap Markdown
 installer, authenticate, and confirm **Open**. Only bypass this warning for an
 installer downloaded from this project's GitHub release.
 
-Each release includes a `.sha256` file. To verify the download before opening
-it, run this in the directory containing both files:
+Each release includes a `.sha256` file. Set `VERSION` to the version you
+downloaded and run this in the directory containing both files:
 
 ```sh
-shasum -a 256 -c rewrap-markdown-0.2-unsigned.pkg.sha256
+VERSION=0.3
+shasum -a 256 -c "rewrap-markdown-${VERSION}-unsigned.pkg.sha256"
 ```
 
 Upgrades retain the remembered Hard Wrap width and automatically update any
@@ -127,10 +128,10 @@ sudo "/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
 
 Download the binary for your Mac from the
 [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
-For the current 0.2 release:
+Set `VERSION` to the version you downloaded:
 
 ```sh
-VERSION=0.2
+VERSION=0.3
 ARCH=$(uname -m)
 mkdir -p "$HOME/.local/bin"
 install -m 755 \
