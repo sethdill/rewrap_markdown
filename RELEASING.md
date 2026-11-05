@@ -191,3 +191,35 @@ dependency. Recheck the formula after Swift upgrades; if runtime compatibility
 changes, rebuild and increment the formula revision in the tap. A successful
 upstream Swift-container test alone does not validate Homebrew's toolchain or
 runtime linkage.
+
+### Initial Homebrew validation
+
+The [native Homebrew matrix](https://github.com/sethdill/rewrap_markdown/actions/runs/41961286964)
+passed at implementation commit `9047e8b` using the provisional 0.3 formula
+pinned to source commit `97b8ff23352ce8b46fcdc372404d3d0300265edb`:
+
+| Native runner | Style | Strict online audit | Source install | Formula test | Linkage | Removal |
+| --- | --- | --- | --- | --- | --- | --- |
+| macOS 26 Apple Silicon | Pass | Pass | Pass | Pass | Pass | Pass |
+| macOS 26 Intel | Pass | Pass | Pass | Pass | Pass | Pass |
+| Ubuntu 24.04 x86_64 | Pass | Pass | Pass | Pass | Pass | Pass |
+| Ubuntu 24.04 ARM64 | Pass | Pass | Pass | Pass | Pass | Pass |
+
+Linux used Homebrew Swift 6.4.2, not a preinstalled Swift container toolchain.
+The formula test covers version reporting, ordinary wrapping, unwrap, and
+commit mode with subject/trailer preservation. The separate
+[Linux regression workflow](https://github.com/sethdill/rewrap_markdown/actions/runs/41961286874)
+also passed, including the existing static-build and distribution checks.
+
+A local Intel Mac with macOS 13, Homebrew 5.0.6, and Apple Swift 5.9.2 passed
+source installation, style, strict online audit, all formula assertions, and
+linkage; the temporary CLI and local tap were removed afterward. This older
+host is outside current Homebrew Tier 1, so use the native matrix as the main
+supported-platform evidence.
+
+The updater reproduced the formula from the real pinned GitHub archive with
+no diff. A separate check using the same archive confirmed that a mismatched
+requested VERSION is rejected before writing. These results validate the
+provisional source formula; repeat the matrix for the final release pin and
+after transfer to the approved tap. Public-tap installation remains untested
+because no tap has been published.
