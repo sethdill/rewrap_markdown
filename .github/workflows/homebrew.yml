@@ -1,0 +1,41 @@
+name: Homebrew
+
+on:
+  push:
+    branches: [codex/homebrew-support, release/0.3, main]
+    paths: ['Packaging/homebrew/**', 'scripts/update-homebrew.py', '.github/workflows/homebrew.yml']
+  pull_request:
+    paths: ['Packaging/homebrew/**', 'scripts/update-homebrew.py', '.github/workflows/homebrew.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  formula:
+    name: Formula (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-26, macos-26-intel, ubuntu-24.04, ubuntu-24.04-arm]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Homebrew/actions/setup-homebrew@master
+      - name: Prepare local tap (never publish)
+        run: |
+          brew tap-new sethdill/tap
+          cp Packaging/homebrew/Formula/rewrap-markdown.rb "$(brew --repository sethdill/tap)/Formula/"
+      - name: Style
+        run: brew style sethdill/tap/rewrap-markdown
+      - name: Audit
+        run: brew audit --strict --online sethdill/tap/rewrap-markdown
+      - name: Install from immutable source
+        run: brew install --build-from-source --verbose sethdill/tap/rewrap-markdown
+      - name: Test installed CLI
+        run: brew test sethdill/tap/rewrap-markdown
+      - name: Inspect runtime linkage
+        run: brew linkage --test sethdill/tap/rewrap-markdown
+      - name: Remove CLI
+        run: brew uninstall sethdill/tap/rewrap-markdown
