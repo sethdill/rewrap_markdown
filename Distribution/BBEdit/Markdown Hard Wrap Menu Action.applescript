@@ -9,6 +9,7 @@
 -- The bullet is Option-8. The first filename ends with a single ellipsis.
 
 property defaultWrapWidth : 70
+property minWrapWidth : 0
 property maxWrapWidth : 1000
 property rewrapMarkdownPath : ""
 property preferencesSuite : "com.sethdillingham.rewrap-markdown"
@@ -109,7 +110,7 @@ on rememberedWrapWidth()
 	if savedValue is missing value then return my defaultWrapWidth
 
 	set savedWidth to savedValue's integerValue() as integer
-	if savedWidth is less than 1 or savedWidth is greater than maxWrapWidth then return my defaultWrapWidth
+	if savedWidth is less than minWrapWidth or savedWidth is greater than maxWrapWidth then return my defaultWrapWidth
 	return savedWidth
 end rememberedWrapWidth
 
@@ -121,15 +122,15 @@ end saveWrapWidth
 
 on askForWrapWidth(currentWidth)
 	repeat
-		set dialogResult to display dialog "Rewrap Markdown width:" default answer (currentWidth as text) buttons {"Cancel", "Rewrap"} default button "Rewrap" cancel button "Cancel"
+		set dialogResult to display dialog "Rewrap Markdown width (0 unwraps):" default answer (currentWidth as text) buttons {"Cancel", "Rewrap"} default button "Rewrap" cancel button "Cancel"
 		set widthText to text returned of dialogResult
 
 		try
 			set candidateWidth to widthText as integer
-			if candidateWidth is less than 1 or candidateWidth is greater than maxWrapWidth then error
+			if candidateWidth is less than minWrapWidth or candidateWidth is greater than maxWrapWidth then error
 			return candidateWidth
 		on error
-			display alert "Width must be a whole number from 1 to " & (maxWrapWidth as text) & "."
+			display alert "Width must be a whole number from " & (minWrapWidth as text) & " to " & (maxWrapWidth as text) & ". Use 0 to unwrap."
 		end try
 	end repeat
 end askForWrapWidth

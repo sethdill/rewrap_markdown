@@ -1,24 +1,24 @@
-# Rewrap Markdown 0.2
+# Rewrap Markdown 0.3
 
-Rewrap Markdown 0.2 adds a Markdown-aware replacement for BBEdit's Hard Wrap
-commands and a customizable macOS installer.
+Rewrap Markdown 0.3 can unwrap Markdown for web forms and rewrap Git commit
+messages without disturbing their special structure.
 
 ## Highlights
 
-- **Markdown-aware Hard Wrap:** BBEdit's **Text > Hard Wrap…** prompts for a
-  width and rewraps the selection or complete Markdown document while
-  preserving Markdown structure.
-- **Remembered width:** **Text > Hard Wrap** immediately uses the last width.
-  Hold Shift to bypass Rewrap Markdown and use BBEdit's built-in command.
-- **macOS installer:** One universal installer supports Intel and Apple Silicon.
-  Markdown-aware Hard Wrap is selected by default; the BBEdit Text Filter and
-  `/usr/local/bin/rewrap-markdown` link are optional components.
-- **Straightforward removal:** The installer includes an uninstaller for its
-  shared executable, BBEdit integrations, command-line link, and receipts.
-- **Improved source installation:** `make install-cli`, `make install`,
-  `make install-hard-wrap`, and their uninstall counterparts use stable
-  installation locations.
+- **Unwrap mode:** `--unwrap`, or width `0`, joins each paragraph and list item
+  onto one line while preserving Markdown structure and intentional hard
+  breaks. BBEdit's Markdown-aware Hard Wrap dialog also accepts `0`.
+- **Commit message mode:** `--commit` leaves the subject, `#` comment lines, and
+  final Git trailer block unchanged while rewrapping the body at 72 columns by
+  default.
+- **Commit hook:** The release includes a `commit-msg` hook that safely rewrites
+  a message only after the filter succeeds.
+- **Linux command-line support:** Swift and Python support wrapping, `--unwrap`,
+  `--commit`, and the `commit-msg` hook on Linux. Release binaries for x86_64
+  and aarch64 are statically linked with Swift's official Static Linux SDK and
+  include SHA-256 files. Both architectures are tested natively with Ubuntu
+  22.04/24.04, Debian 12, and Alpine 3.22 userlands; other Linux environments
+  have not been validated. BBEdit and the installer remain macOS-only.
+- **Discoverable CLI:** `--help` describes the available modes.
 
-The 0.2 installer is unsigned and not notarized. macOS will require approval
-under **System Settings > Privacy & Security > Open Anyway**. Verify the
-download against the accompanying SHA-256 file before approving it.
+Both new modes are available in the Swift executable and Python implementation.

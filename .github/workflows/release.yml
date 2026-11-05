@@ -56,6 +56,12 @@ jobs:
           path: artifact/*
           if-no-files-found: error
 
+  build-linux:
+    name: Build and smoke-test Linux release binaries
+    uses: ./.github/workflows/linux-release.yml
+    with:
+      ref: ${{ inputs.tag || github.ref }}
+
   package-macos:
     name: Build universal macOS installer
     needs: build-macos
@@ -105,7 +111,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [build-macos, package-macos]
+    needs: [build-macos, package-macos, build-linux]
     if: github.event_name == 'push' || (inputs.publish && inputs.tag != '')
     runs-on: ubuntu-latest
 
@@ -127,7 +133,8 @@ jobs:
           cp Reference/rewrap_markdown.py "dist/rewrap-markdown-${version}.py"
           cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "dist/Rewrap-Markdown-Swift"
           cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "dist/Markdown-Hard-Wrap-Menu-Action.applescript"
-          chmod +x "dist/rewrap-markdown-${version}.py" "dist/Rewrap-Markdown-Swift"
+          cp "Distribution/Git/commit-msg" "dist/rewrap-markdown-commit-msg"
+          chmod +x "dist/rewrap-markdown-${version}.py" "dist/Rewrap-Markdown-Swift" "dist/rewrap-markdown-commit-msg"
 
       - name: Publish assets
         env:

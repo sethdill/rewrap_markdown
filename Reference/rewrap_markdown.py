@@ -30,9 +30,13 @@ Behavior:
     exactly; only the wrapping/indentation of continuation lines changes.
 
 Wrap width resolution order (first one found wins):
-  1. First command-line argument, e.g. `md_rewrap.py 100`
+  1. Numeric command-line argument, e.g. `rewrap_markdown.py 100`
   2. MD_REWRAP_WIDTH environment variable
-  3. DEFAULT_WIDTH constant below
+  3. DEFAULT_WIDTH, or DEFAULT_COMMIT_MESSAGE_WIDTH with `--commit`
+
+Use `--unwrap` or width 0 to join paragraphs and list items onto one line.
+Use `--commit` to preserve a commit message's subject, comment lines, and
+trailer block while rewrapping its body.
 
 This is a pragmatic, hand-rolled parser (no third-party dependencies), not a
 full CommonMark implementation. It's tuned for typical hand-written
@@ -44,8 +48,9 @@ import re
 import sys
 from typing import Literal, Optional
 
-VERSION = "0.2"
+VERSION = "0.3"
 DEFAULT_WIDTH = 70
+DEFAULT_COMMIT_MESSAGE_WIDTH = 72
 BreakStyle = Literal["\\", "  "]
 
 # ---------------------------------------------------------------------------
@@ -72,6 +77,8 @@ HTML_COMMENT_END_RE = re.compile(r"-->\s*$")
 FRONT_MATTER_DELIM_RE = re.compile(r"^-{3,}\s*$")
 GFM_ALERT_MARKER_RE = re.compile(r"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$")
 HARD_BREAK_RE = re.compile(r"(\\|  +)$")
+COMMIT_COMMENT_RE = re.compile(r"^[ \t]*#")
+COMMIT_TRAILER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*[ \t]*[:=][ \t]+.+$")
 
 # Inline "atomic" spans that must never be split by the wrapper.
 INLINE_ATOMIC_RE = re.compile(
@@ -84,25 +91,39 @@ INLINE_ATOMIC_RE = re.compile(
 )
 
 
-def get_width() -> int:
-    if len(sys.argv) > 1:
+def normalize_width(width: int) -> int:
+    return 0 if width == 0 else max(1, width)
+
+
+def get_width(fallback: int = DEFAULT_WIDTH) -> int:
+    for argument in sys.argv[1:]:
         try:
-            return max(1, int(sys.argv[1]))
+            return normalize_width(int(argument))
         except ValueError:
-            pass
+            continue
 
     env = os.environ.get("MD_REWRAP_WIDTH")
     if env:
         try:
-            return max(1, int(env))
+            return normalize_width(int(env))
         except ValueError:
             pass
 
-    return DEFAULT_WIDTH
+    return normalize_width(fallback)
 
 
 def version_string() -> str:
     return f"rewrap-markdown {VERSION}"
+
+
+def usage_string() -> str:
+    return """Usage: rewrap-markdown [--unwrap] [--commit] [WIDTH]
+
+Read Markdown from standard input and write the transformed text to standard output.
+
+  --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
+  --commit  Preserve the subject, comments, and trailers of a Git commit message.
+  --version Print the version."""
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +164,9 @@ def wrap_tokens(tokens: list[str], width: int) -> list[str]:
     than `width` is placed alone on its own (over-length) line rather than
     being split.
     """
+    if width == 0:
+        return [" ".join(tokens)]
+
     lines: list[str] = []
     current: list[str] = []
     current_len: int = 0
@@ -228,6 +252,10 @@ def is_table_row(line: str) -> bool:
 
 def is_html_block_start(line: str) -> bool:
     return HTML_BLOCK_START_RE.match(line) is not None
+
+
+def nested_width(width: int, prefix_width: int) -> int:
+    return 0 if width == 0 else max(1, width - prefix_width)
 
 
 def process_block(lines: list[str], width: int) -> list[str]:
@@ -358,7 +386,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
                 inner.append(m.group(2))
                 i += 1
             prefix_width = 2  # "> "
-            rendered = process_block(inner, max(1, width - prefix_width))
+            rendered = process_block(inner, nested_width(width, prefix_width))
             for rline in rendered:
                 out.append("> " + rline if rline else ">")
             continue
@@ -370,7 +398,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
             content_col = len(marker)
             first_text = line[fnm.end(2):]
             item_lines, i = gather_indented_block(lines, i, content_col, first_text)
-            rendered = process_block(item_lines, max(1, width - content_col))
+            rendered = process_block(item_lines, nested_width(width, content_col))
             out.extend(render_hanging(rendered, marker, " " * content_col))
             continue
 
@@ -381,7 +409,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
             marker = indent + bullet + " "
             content_col = len(marker)
             item_lines, i = gather_indented_block(lines, i, content_col, first_text)
-            rendered = process_block(item_lines, max(1, width - content_col))
+            rendered = process_block(item_lines, nested_width(width, content_col))
             out.extend(render_hanging(rendered, marker, " " * content_col))
             continue
 
@@ -392,7 +420,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
             marker = indent + num + punct + " "
             content_col = len(marker)
             item_lines, i = gather_indented_block(lines, i, content_col, first_text)
-            rendered = process_block(item_lines, max(1, width - content_col))
+            rendered = process_block(item_lines, nested_width(width, content_col))
             out.extend(render_hanging(rendered, marker, " " * content_col))
             continue
 
@@ -486,7 +514,7 @@ def rewrap(text: str, width: int) -> str:
     if lines and lines[-1] == "" and had_trailing_newline:
         lines = lines[:-1]
     
-    out = process_block(lines, width)
+    out = process_block(lines, normalize_width(width))
     result: str = "\n".join(out)
     if had_trailing_newline:
         result += "\n"
@@ -494,14 +522,92 @@ def rewrap(text: str, width: int) -> str:
     return result
 
 
+def commit_trailer_block_start(lines: list[str]) -> Optional[int]:
+    if not lines:
+        return None
+
+    end = len(lines) - 1
+    while end >= 0 and (BLANK_RE.match(lines[end]) or COMMIT_COMMENT_RE.match(lines[end])):
+        end -= 1
+    if end < 0:
+        return None
+
+    start = end
+    while (
+        start > 0
+        and not BLANK_RE.match(lines[start - 1])
+        and not COMMIT_COMMENT_RE.match(lines[start - 1])
+    ):
+        start -= 1
+
+    found_trailer = False
+    for line in lines[start : end + 1]:
+        if COMMIT_TRAILER_RE.match(line):
+            found_trailer = True
+        elif line.startswith((" ", "\t")) and found_trailer:
+            continue
+        else:
+            return None
+    return start if found_trailer else None
+
+
+def process_commit_message_body(lines: list[str], width: int) -> list[str]:
+    trailer_start = commit_trailer_block_start(lines)
+    body_end = len(lines) if trailer_start is None else trailer_start
+    output: list[str] = []
+    pending: list[str] = []
+
+    def flush_pending() -> None:
+        if pending:
+            output.extend(process_block(pending, width))
+            pending.clear()
+
+    for line in lines[:body_end]:
+        if COMMIT_COMMENT_RE.match(line):
+            flush_pending()
+            output.append(line)
+        else:
+            pending.append(line)
+    flush_pending()
+
+    if trailer_start is not None:
+        output.extend(lines[trailer_start:])
+    return output
+
+
+def rewrap_commit_message(text: str, width: int = DEFAULT_COMMIT_MESSAGE_WIDTH) -> str:
+    had_trailing_newline = text.endswith("\n")
+    lines = text.split("\n")
+    if lines and lines[-1] == "" and had_trailing_newline:
+        lines = lines[:-1]
+    if not lines:
+        return text
+
+    output = [lines[0]]
+    output.extend(process_commit_message_body(lines[1:], normalize_width(width)))
+    result = "\n".join(output)
+    return result + "\n" if had_trailing_newline else result
+
+
 def main():
     if "--version" in sys.argv[1:] or "-v" in sys.argv[1:]:
         print(version_string())
         return
+    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
+        print(usage_string())
+        return
 
-    width = get_width()
+    arguments = sys.argv[1:]
+    unwrap = "--unwrap" in arguments
+    commit_message = "--commit" in arguments
+    width = get_width(
+        DEFAULT_COMMIT_MESSAGE_WIDTH if commit_message else DEFAULT_WIDTH
+    )
     data = sys.stdin.read()
-    sys.stdout.write(rewrap(data, width))
+    if commit_message:
+        sys.stdout.write(rewrap_commit_message(data, 0 if unwrap else width))
+    else:
+        sys.stdout.write(rewrap(data, 0 if unwrap else width))
 
 
 if __name__ == "__main__":

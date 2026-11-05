@@ -1,0 +1,16 @@
+#!/bin/sh
+# Rewrap a Git commit message while preserving its subject, comments, and trailers.
+
+set -eu
+
+if [ "$#" -ne 1 ]; then
+	printf 'Usage: %s COMMIT_MESSAGE_FILE\n' "$0" >&2
+	exit 2
+fi
+
+message_file=$1
+temporary_file=$(mktemp "${TMPDIR:-/tmp}/rewrap-markdown-commit.XXXXXX")
+trap 'rm -f "$temporary_file"' EXIT HUP INT TERM
+
+"${REWRAP_MARKDOWN:-rewrap-markdown}" --commit < "$message_file" > "$temporary_file"
+cat "$temporary_file" > "$message_file"

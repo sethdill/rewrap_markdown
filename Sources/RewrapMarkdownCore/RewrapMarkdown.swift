@@ -4,8 +4,9 @@
 import Foundation
 
 public enum RewrapMarkdown {
-    public static let version = "0.2"
+    public static let version = "0.3"
     public static let defaultWidth = 70
+    public static let defaultCommitMessageWidth = 72
 
     public static var versionString: String {
         "rewrap-markdown \(version)"
@@ -13,30 +14,64 @@ public enum RewrapMarkdown {
 
     public static func width(
         arguments: [String] = Array(CommandLine.arguments.dropFirst()),
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fallback: Int = defaultWidth
     ) -> Int {
         if let first = arguments.first, let value = Int(first) {
-            return max(1, value)
+            return normalizedWidth(value)
         }
         if let env = environment["MD_REWRAP_WIDTH"], let value = Int(env) {
-            return max(1, value)
+            return normalizedWidth(value)
         }
-        return defaultWidth
+        return normalizedWidth(fallback)
     }
 
     public static func rewrap(_ text: String, width: Int) -> String {
+        rewrapDocument(text, width: normalizedWidth(width))
+    }
+
+    public static func rewrapCommitMessage(
+        _ text: String,
+        width: Int = defaultCommitMessageWidth
+    ) -> String {
         let hadTrailingNewline = text.hasSuffix("\n")
         var lines = text.components(separatedBy: "\n")
         if hadTrailingNewline, lines.last == "" {
             lines.removeLast()
         }
 
-        var result = processBlock(lines, width: width).joined(separator: "\n")
+        guard let subject = lines.first else {
+            return text
+        }
+
+        let body = processCommitMessageBody(
+            Array(lines.dropFirst()),
+            width: normalizedWidth(width)
+        )
+        var result = ([subject] + body).joined(separator: "\n")
         if hadTrailingNewline {
             result += "\n"
         }
         return result
     }
+}
+
+private func normalizedWidth(_ width: Int) -> Int {
+    width == 0 ? 0 : max(1, width)
+}
+
+private func rewrapDocument(_ text: String, width: Int) -> String {
+    let hadTrailingNewline = text.hasSuffix("\n")
+    var lines = text.components(separatedBy: "\n")
+    if hadTrailingNewline, lines.last == "" {
+        lines.removeLast()
+    }
+
+    var result = processBlock(lines, width: width).joined(separator: "\n")
+    if hadTrailingNewline {
+        result += "\n"
+    }
+    return result
 }
 
 private let blank = RegexPattern(#"^\s*$"#)
@@ -56,6 +91,8 @@ private let htmlCommentStart = RegexPattern(#"^ {0,3}<!--"#)
 private let htmlCommentEnd = RegexPattern(#"-->\s*$"#)
 private let gfmAlertMarker = RegexPattern(#"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$"#)
 private let hardBreak = RegexPattern(#"(\\|  +)$"#)
+private let commitComment = RegexPattern(#"^[ \t]*#"#)
+private let commitTrailer = RegexPattern(#"^[A-Za-z0-9][A-Za-z0-9-]*[ \t]*[:=][ \t]+.+$"#)
 private let inlineAtomic = RegexPattern(
     #"(`+).*?\1|!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\([^)]*\)|\[[^\]]*\](?:\[[^\]]*\])?|<[^ >]+>|https?://\S+"#
 )
@@ -173,7 +210,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
                 inner.append(match[2])
                 i += 1
             }
-            let rendered = processBlock(inner, width: max(1, width - 2))
+            let rendered = processBlock(inner, width: nestedWidth(width, removing: 2))
             output.append(contentsOf: rendered.map { $0.isEmpty ? ">" : "> " + $0 })
             continue
         }
@@ -183,7 +220,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
             let contentColumn = marker.count
             let firstText = substring(line, fromUTF16Offset: match.rangeEnd(2))
             let gathered = gatherIndentedBlock(lines, start: i, contentColumn: contentColumn, firstText: firstText)
-            let rendered = processBlock(gathered.lines, width: max(1, width - contentColumn))
+            let rendered = processBlock(gathered.lines, width: nestedWidth(width, removing: contentColumn))
             output.append(contentsOf: renderHanging(rendered, firstPrefix: marker, restPrefix: String(repeating: " ", count: contentColumn)))
             i = gathered.nextIndex
             continue
@@ -193,7 +230,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
             let marker = match[1] + match[2] + " "
             let contentColumn = marker.count
             let gathered = gatherIndentedBlock(lines, start: i, contentColumn: contentColumn, firstText: match[4])
-            let rendered = processBlock(gathered.lines, width: max(1, width - contentColumn))
+            let rendered = processBlock(gathered.lines, width: nestedWidth(width, removing: contentColumn))
             output.append(contentsOf: renderHanging(rendered, firstPrefix: marker, restPrefix: String(repeating: " ", count: contentColumn)))
             i = gathered.nextIndex
             continue
@@ -203,7 +240,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
             let marker = match[1] + match[2] + match[3] + " "
             let contentColumn = marker.count
             let gathered = gatherIndentedBlock(lines, start: i, contentColumn: contentColumn, firstText: match[5])
-            let rendered = processBlock(gathered.lines, width: max(1, width - contentColumn))
+            let rendered = processBlock(gathered.lines, width: nestedWidth(width, removing: contentColumn))
             output.append(contentsOf: renderHanging(rendered, firstPrefix: marker, restPrefix: String(repeating: " ", count: contentColumn)))
             i = gathered.nextIndex
             continue
@@ -251,6 +288,10 @@ private func tokenizeInline(_ text: String) -> [String] {
 }
 
 private func wrapTokens(_ tokens: [String], width: Int) -> [String] {
+    if width == 0 {
+        return [tokens.joined(separator: " ")]
+    }
+
     var lines: [String] = []
     var current: [String] = []
     var currentLength = 0
@@ -271,6 +312,75 @@ private func wrapTokens(_ tokens: [String], width: Int) -> [String] {
         lines.append(current.joined(separator: " "))
     }
     return lines.isEmpty ? [""] : lines
+}
+
+private func processCommitMessageBody(_ lines: [String], width: Int) -> [String] {
+    let trailerStart = commitTrailerBlockStart(in: lines)
+    let bodyEnd = trailerStart ?? lines.count
+    var output: [String] = []
+    var pending: [String] = []
+
+    func flushPending() {
+        guard !pending.isEmpty else {
+            return
+        }
+        output.append(contentsOf: processBlock(pending, width: width))
+        pending.removeAll()
+    }
+
+    for line in lines[..<bodyEnd] {
+        if commitComment.matches(line) {
+            flushPending()
+            output.append(line)
+        } else {
+            pending.append(line)
+        }
+    }
+    flushPending()
+
+    if let trailerStart {
+        output.append(contentsOf: lines[trailerStart...])
+    }
+    return output
+}
+
+private func commitTrailerBlockStart(in lines: [String]) -> Int? {
+    guard !lines.isEmpty else {
+        return nil
+    }
+
+    var end = lines.count - 1
+    while end >= 0, blank.matches(lines[end]) || commitComment.matches(lines[end]) {
+        end -= 1
+    }
+    guard end >= 0 else {
+        return nil
+    }
+
+    var start = end
+    while start > 0,
+          !blank.matches(lines[start - 1]),
+          !commitComment.matches(lines[start - 1]) {
+        start -= 1
+    }
+
+    var foundTrailer = false
+    for line in lines[start...end] {
+        if commitTrailer.matches(line) {
+            foundTrailer = true
+        } else if line.first == " " || line.first == "\t" {
+            guard foundTrailer else {
+                return nil
+            }
+        } else {
+            return nil
+        }
+    }
+    return foundTrailer ? start : nil
+}
+
+private func nestedWidth(_ width: Int, removing prefixLength: Int) -> Int {
+    width == 0 ? 0 : max(1, width - prefixLength)
 }
 
 private func wrapParagraphText(_ rawLines: [String], width: Int) -> [String] {

@@ -9,12 +9,19 @@ RELEASE_BINARY := $(abspath .build/release/$(PRODUCT))
 INSTALL_BIN_DIR ?= $(HOME)/.local/bin
 INSTALLED_BINARY := $(INSTALL_BIN_DIR)/$(PRODUCT)
 DIST_DIR := dist
+OS := $(shell uname -s)
 ARCH := $(shell uname -m)
+PLATFORM := $(if $(filter Darwin,$(OS)),macos,linux)
+LINUX_ARCH ?= $(if $(filter arm64,$(ARCH)),aarch64,$(ARCH))
+LINUX_SDK := $(LINUX_ARCH)-swift-linux-musl
+LINUX_BINARY := $(abspath .build/$(LINUX_SDK)/release/$(PRODUCT))
+DIST_LINUX_BINARY := $(DIST_DIR)/$(PRODUCT)-$(VERSION)-linux-$(LINUX_ARCH)
 PKG_ARCHS ?= $(shell (lipo -archs "$(RELEASE_BINARY)" 2>/dev/null || uname -m) | tr ' ' ',')
-DIST_BINARY := $(DIST_DIR)/$(PRODUCT)-$(VERSION)-macos-$(ARCH)
+DIST_BINARY := $(DIST_DIR)/$(PRODUCT)-$(VERSION)-$(PLATFORM)-$(ARCH)
 DIST_PYTHON := $(DIST_DIR)/$(PRODUCT)-$(VERSION).py
 DIST_BBEDIT_SWIFT := $(DIST_DIR)/Rewrap Markdown (Swift)
 DIST_BBEDIT_HARD_WRAP := $(DIST_DIR)/Markdown-Hard-Wrap-Menu-Action.applescript
+DIST_GIT_COMMIT_MSG := $(DIST_DIR)/rewrap-markdown-commit-msg
 PKG_IDENTIFIER ?= com.sethdillingham.rewrap-markdown
 PKG_BUILD_DIR := .build/installer
 PKG_COMPONENTS_DIR := $(PKG_BUILD_DIR)/components
@@ -45,7 +52,7 @@ INSTALLED_FILTER = $(BBEDIT_FILTERS_DIR)/$(FILTER_NAME)
 INSTALLED_HARD_WRAP = $(patsubst %/,%,$(BBEDIT_MENU_SCRIPTS_DIR))/$(HARD_WRAP_SCRIPT_NAME)
 INSTALLED_HARD_WRAP_IMMEDIATE = $(patsubst %/,%,$(BBEDIT_MENU_SCRIPTS_DIR))/$(HARD_WRAP_IMMEDIATE_SCRIPT_NAME)
 
-.PHONY: build release test test-executable dist pkg-unsigned package-unsigned install-cli install install-hard-wrap install-all uninstall-cli uninstall uninstall-hard-wrap uninstall-all clean print-bbedit-filters-dir
+.PHONY: require-macos dist-cli dist-macos release-linux dist-linux test-smoke build release test test-executable dist pkg-unsigned package-unsigned install-cli install install-hard-wrap install-all uninstall-cli uninstall uninstall-hard-wrap uninstall-all clean print-bbedit-filters-dir
 
 build:
 	swift build
@@ -59,19 +66,42 @@ test:
 test-executable: release
 	REWRAP_MARKDOWN_EXECUTABLE="$(RELEASE_BINARY)" swift test
 
-dist: test-executable
+# Portable native build, scripts, and CLI installation work on macOS and Linux.
+dist: dist-cli $(if $(filter Darwin,$(OS)),dist-macos)
+
+dist-cli: test-executable
 	mkdir -p "$(DIST_DIR)"
 	cp "$(RELEASE_BINARY)" "$(DIST_BINARY)"
 	cp Reference/rewrap_markdown.py "$(DIST_PYTHON)"
+	cp "Distribution/Git/commit-msg" "$(DIST_GIT_COMMIT_MSG)"
+	chmod +x "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_GIT_COMMIT_MSG)"
+
+# Requires the matching official Swift toolchain and Static Linux SDK.
+release-linux:
+	@case "$(LINUX_ARCH)" in x86_64|aarch64) ;; *) echo "LINUX_ARCH must be x86_64 or aarch64" >&2; exit 1;; esac
+	swift build -c release --swift-sdk "$(LINUX_SDK)"
+
+dist-linux: release-linux
+	mkdir -p "$(DIST_DIR)"
+	cp "$(LINUX_BINARY)" "$(DIST_LINUX_BINARY)"
+	chmod +x "$(DIST_LINUX_BINARY)"
+	cd "$(DIST_DIR)" && shasum -a 256 "$(notdir $(DIST_LINUX_BINARY))" > "$(notdir $(DIST_LINUX_BINARY)).sha256"
+
+test-smoke: release
+	python3 scripts/smoke.py "$(RELEASE_BINARY)"
+	python3 scripts/smoke.py python3 Reference/rewrap_markdown.py
+
+require-macos:
+	@test "$(OS)" = Darwin || { echo "This target requires macOS (installer/BBEdit integration). Use install-cli or dist-cli on Linux." >&2; exit 1; }
+
+dist-macos: require-macos dist-cli
 	cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "$(DIST_BBEDIT_SWIFT)"
 	cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "$(DIST_BBEDIT_HARD_WRAP)"
-	chmod +x "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)"
-	@echo "Created release artifacts in $(DIST_DIR):"
-	@printf '  %s\n' "$(DIST_BINARY)" "$(DIST_PYTHON)" "$(DIST_BBEDIT_SWIFT)" "$(DIST_BBEDIT_HARD_WRAP)"
+	chmod +x "$(DIST_BBEDIT_SWIFT)"
 
-pkg-unsigned: test-executable package-unsigned
+pkg-unsigned: require-macos test-executable package-unsigned
 
-package-unsigned:
+package-unsigned: require-macos
 	rm -rf "$(PKG_BUILD_DIR)"
 	mkdir -p "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)"
 	mkdir -p "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/Components/Installer"
@@ -123,7 +153,7 @@ install-cli: release
 	chmod +x "$(INSTALLED_BINARY)"
 	@echo "Installed rewrap-markdown executable: $(INSTALLED_BINARY)"
 
-install: install-cli
+install: require-macos install-cli
 	@if [ -z "$(BBEDIT_FILTERS_DIR)" ]; then \
 		echo "Could not determine BBEdit's Text Filters folder."; \
 		echo "Set BBEDIT_FILTERS_DIR=/path/to/Text Filters and run make install again."; \
@@ -144,7 +174,7 @@ install: install-cli
 	chmod +x "$(INSTALLED_FILTER)"
 	@echo "Installed BBEdit text filter: $(INSTALLED_FILTER)"
 
-install-hard-wrap: install-cli
+install-hard-wrap: require-macos install-cli
 	@if [ -z "$(BBEDIT_MENU_SCRIPTS_DIR)" ]; then \
 		echo "Could not determine BBEdit's Menu Scripts folder."; \
 		echo "Set BBEDIT_MENU_SCRIPTS_DIR=/path/to/Menu Scripts and run make install-hard-wrap again."; \
@@ -156,13 +186,13 @@ install-hard-wrap: install-cli
 	@echo "Installed BBEdit Hard Wrap menu actions:"
 	@printf '  %s\n' "$(INSTALLED_HARD_WRAP)" "$(INSTALLED_HARD_WRAP_IMMEDIATE)"
 
-install-all: install install-hard-wrap
+install-all: require-macos install install-hard-wrap
 
 uninstall-cli:
 	rm -f "$(INSTALLED_BINARY)"
 	@echo "Removed rewrap-markdown executable: $(INSTALLED_BINARY)"
 
-uninstall:
+uninstall: require-macos
 	@if [ -z "$(BBEDIT_FILTERS_DIR)" ]; then \
 		echo "Could not determine BBEdit's Text Filters folder."; \
 		echo "Set BBEDIT_FILTERS_DIR=/path/to/Text Filters and run make uninstall again."; \
@@ -171,7 +201,7 @@ uninstall:
 	rm -f "$(INSTALLED_FILTER)"
 	@echo "Removed BBEdit text filter: $(INSTALLED_FILTER)"
 
-uninstall-hard-wrap:
+uninstall-hard-wrap: require-macos
 	@if [ -z "$(BBEDIT_MENU_SCRIPTS_DIR)" ]; then \
 		echo "Could not determine BBEdit's Menu Scripts folder."; \
 		echo "Set BBEDIT_MENU_SCRIPTS_DIR=/path/to/Menu Scripts and run make uninstall-hard-wrap again."; \
@@ -180,12 +210,12 @@ uninstall-hard-wrap:
 	rm -f "$(INSTALLED_HARD_WRAP)" "$(INSTALLED_HARD_WRAP_IMMEDIATE)"
 	@echo "Removed BBEdit Hard Wrap menu actions."
 
-uninstall-all: uninstall uninstall-hard-wrap uninstall-cli
+uninstall-all: require-macos uninstall uninstall-hard-wrap uninstall-cli
 
 clean:
 	swift package clean
 
-print-bbedit-filters-dir:
+print-bbedit-filters-dir: require-macos
 	@if [ -z "$(BBEDIT_FILTERS_DIR)" ]; then \
 		echo "Could not determine BBEdit's Text Filters folder."; \
 		exit 1; \
