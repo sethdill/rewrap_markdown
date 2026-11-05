@@ -168,3 +168,20 @@ workflow creates it.
 
 For a tag that already exists, run the `Release` workflow manually from GitHub
 Actions, enable **Publish**, and enter the tag name, such as `v0.3`.
+
+## Homebrew release handoff
+
+Homebrew support is staged in `Packaging/homebrew`, with the decision and native
+validation matrix documented in its [README](Packaging/homebrew/README.md).
+After finalizing a release tag, run `scripts/update-homebrew.py` with the public
+version and full release commit SHA. Review the URL, version, and SHA-256 diff;
+run style, strict online audit, installation, functional tests, and linkage on
+both macOS architectures and both Linux architectures. Open a separate tap PR
+only after Seth approves creating/publishing `sethdill/homebrew-tap`. Do not
+claim the public brew command works until the approved tap is published and
+clean-machine installation is verified. There is no automatic tap publishing.
+
+Never move a published source tag or overwrite an archive to fix a release.
+The formula pins commit archives; a changed digest requires investigation.
+The unsigned installer is ineligible for a cask: require signing, notarization,
+and normal Gatekeeper acceptance before proposing one.

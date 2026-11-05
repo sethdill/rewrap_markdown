@@ -22,7 +22,7 @@ jobs:
         runner: [macos-26, macos-26-intel, ubuntu-24.04, ubuntu-24.04-arm]
     steps:
       - uses: actions/checkout@v6
-      - uses: Homebrew/actions/setup-homebrew@master
+      - uses: Homebrew/actions/setup-homebrew@55301c8cac0982bc2fbeb71275fa0b71b963bdb1
       - name: Prepare local tap (never publish)
         run: |
           brew tap-new sethdill/tap
