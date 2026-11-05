@@ -25,10 +25,12 @@ jobs:
       - uses: Homebrew/actions/setup-homebrew@55301c8cac0982bc2fbeb71275fa0b71b963bdb1
       - name: Prepare local tap (never publish)
         run: |
-          GIT_AUTHOR_NAME=Homebrew GIT_AUTHOR_EMAIL=homebrew@example.invalid \
-          GIT_COMMITTER_NAME=Homebrew GIT_COMMITTER_EMAIL=homebrew@example.invalid \
-            brew tap-new sethdill/tap
+          git config --global user.name Homebrew
+          git config --global user.email homebrew@example.invalid
+          brew tap-new sethdill/tap
           cp Packaging/homebrew/Formula/rewrap-markdown.rb "$(brew --repository sethdill/tap)/Formula/"
+      - name: Trust only the reviewed local formula
+        run: brew trust --formula sethdill/tap/rewrap-markdown
       - name: Style
         run: brew style sethdill/tap/rewrap-markdown
       - name: Audit

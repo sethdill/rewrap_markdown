@@ -63,6 +63,11 @@ brew linkage --test sethdill/tap/rewrap-markdown
 brew uninstall sethdill/tap/rewrap-markdown
 ```
 
+On current Homebrew, run `brew trust --formula sethdill/tap/rewrap-markdown`
+after copying the reviewed formula and before audit/install. Older Homebrew
+versions may not have that command. The fully qualified public install command
+trusts only the requested formula.
+
 Do not overwrite an existing real tap; use an isolated CI runner instead.
 The formula asserts version reporting, ordinary wrapping, unwrap, and commit
 wrapping with subject and trailer preservation using standard input/output.
