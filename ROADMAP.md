@@ -18,8 +18,9 @@ published; 0.3 is in preparation on `release/0.3`.
 - [x] Add native macOS and Linux Homebrew CI on both architectures.
 - [x] Document source versus binary tradeoffs and repeatable release updates.
 - [x] Complete the Homebrew matrix and record results before merging.
-- [ ] Obtain Seth's explicit approval before creating/publishing the separate tap.
-- [ ] Pin the final v0.3 release commit and publish the approved tap PR.
+- [x] Obtain Seth's approval to create and publish the tap after v0.3 ships
+  and the formula passes validation against the final release commit.
+- [ ] Pin the final v0.3 release commit and create the public tap and publish the formula.
 - [ ] Verify `brew install sethdill/tap/rewrap-markdown` from the public tap.
 
 Follow the [v0.3 publishing checklist](RELEASING.md#v03-publishing-checklist)

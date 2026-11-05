@@ -1,12 +1,12 @@
 # Provisional Homebrew tap
 
-This directory is a reviewable tap layout, not a published tap. On November 4,
-2026, both the GitHub connector and authenticated `gh api` returned 404 for
-`sethdill/homebrew-tap`; no accessible repository was found. A private repository
-outside the account's access cannot be ruled out. Do not create the repository
-or publish its contents without Seth's explicit approval.
+This directory stages the formula for the public `sethdill/homebrew-tap` repository.
+Seth has approved creating the tap and publishing the formula after v0.3 ships,
+the formula is pinned to the final release commit, and the Homebrew checks pass.
+The [v0.3 publishing checklist](../../RELEASING.md#v03-publishing-checklist)
+records the launch steps.
 
-Once approved, released, and published, the intended command is:
+Once the tap is published, install with:
 
 ```sh
 brew install sethdill/tap/rewrap-markdown
@@ -92,7 +92,8 @@ the commit against the release tag and verify the digest independently with
 `curl -fL URL -o source.tar.gz && shasum -a 256 source.tar.gz`.
 Run the entire native matrix after each update; preserve evidence in the PR.
 
-Work belonging in `sethdill/homebrew-tap`, **after approval**:
+After v0.3 ships and the final formula passes the native matrix, create
+the public `sethdill/homebrew-tap` repository and follow these steps:
 
 1. Copy `Formula/rewrap-markdown.rb` from this directory to the tap's `Formula/`.
 2. Add a user-facing README with installation, upgrade, uninstall, supported

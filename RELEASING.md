@@ -172,10 +172,11 @@ Actions, enable **Publish**, and enter the tag name, such as `v0.3`.
 ## v0.3 publishing checklist
 
 After pushing `v0.3`, the release owner should complete these follow-ups.
-The GitHub Release and the Homebrew tap ship separately. If tap approval is
-pending when the GitHub Release goes live, leave the Homebrew launch items
-open on the [v0.3 roadmap](ROADMAP.md#homebrew-cli-installation) and keep the
-README's Homebrew status as planned.
+Seth has approved creating the public `sethdill/homebrew-tap` repository and
+publishing the Rewrap Markdown formula after v0.3 ships, the formula is pinned
+to the final release commit, and the Homebrew checks pass. Keep the roadmap
+items open and the README's Homebrew status as planned until installation
+from the public tap has been verified.
 
 - [ ] Confirm the GitHub Release is live and run **Verify published Linux
   installation** as described under [Build Artifacts](#build-artifacts).
@@ -184,9 +185,8 @@ README's Homebrew status as planned.
   Follow the [formula update procedure](Packaging/homebrew/README.md#release-updates-and-separate-repository-handoff).
 - [ ] Run style, strict online audit, source install, formula tests, and linkage
   on Intel and Apple Silicon macOS and on x86_64 and ARM64 Linux using the final pin.
-- [ ] Obtain Seth's explicit approval to create and publish
-  `sethdill/homebrew-tap`. Transfer the tested formula and open the separate tap
-  PR. Publish it after review and approval.
+- [ ] Create the public `sethdill/homebrew-tap` repository. Transfer the tested
+  formula, open the separate tap PR, and publish after review.
 - [ ] Verify `brew install sethdill/tap/rewrap-markdown` from clean macOS and
   Linux environments. Update the project README and roadmap once it works.
 
