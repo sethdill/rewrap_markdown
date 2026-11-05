@@ -13,6 +13,7 @@ jobs:
   compatibility:
     name: Swift and Python compatibility (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     container: swift:6.2.1-jammy
     strategy:
       fail-fast: false

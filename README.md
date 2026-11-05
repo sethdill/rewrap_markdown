@@ -79,8 +79,9 @@ For a deliberately excessive tour, compare the
 
 ## Install
 
-Rewrap Markdown requires macOS 12 or later. The BBEdit integrations have been
-tested with BBEdit 15.5.5.
+The command-line tool supports macOS 12 or later and Linux. BBEdit integration
+and the `.pkg` installer require macOS; the integrations have been tested with
+BBEdit 15.5.5. Linux release binaries are introduced in 0.3.
 
 ### macOS Installer
 
@@ -113,7 +114,7 @@ components and their receipts:
 sudo "/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
 ```
 
-### Release Binary
+### macOS Release Binary
 
 Download the binary for your Mac from the
 [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
@@ -137,9 +138,54 @@ your shell path, add this to `~/.zprofile` when using Zsh or
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+### Linux Release Binary (0.3)
+
+From the [releases page](https://github.com/sethdill/rewrap_markdown/releases),
+choose a release starting with 0.3 and download both
+`rewrap-markdown-VERSION-linux-x86_64` (Intel/AMD) or
+`rewrap-markdown-VERSION-linux-aarch64` (ARM64), and its `.sha256` file.
+The 0.2 release has no Linux binaries. Before 0.3 is published, build from
+source or use the tested candidate artifacts from GitHub Actions.
+
+In the directory containing the downloaded files:
+
+```sh
+VERSION=0.3
+ARCH=$(uname -m)  # x86_64 or aarch64
+BINARY="rewrap-markdown-${VERSION}-linux-${ARCH}"
+sha256sum -c "${BINARY}.sha256"
+mkdir -p "$HOME/.local/bin"
+install -m 755 "$BINARY" "$HOME/.local/bin/rewrap-markdown"
+export PATH="$HOME/.local/bin:$PATH"
+rewrap-markdown --version
+```
+
+Keep the PATH export in your shell's startup file (for example `~/.bashrc`).
+The binaries use Swift's official Static Linux SDK and need no installed Swift
+runtime. CI executes both architectures natively with Ubuntu 22.04 and 24.04,
+Debian 12, and Alpine 3.22 userlands, checking wrapping, unwrapping, commit
+messages, and the Git hook. Other distributions and older kernels have not been
+validated; these tests do not establish compatibility with every Linux system.
+
+### Python on Linux
+
+With Python 3.10 or newer, the reference CLI also supports all three modes:
+
+```sh
+python3 Reference/rewrap_markdown.py 72 < draft.md > draft-wrapped.md
+python3 Reference/rewrap_markdown.py --unwrap < draft.md > draft-unwrapped.md
+python3 Reference/rewrap_markdown.py --commit < message.txt > message-wrapped.txt
+```
+
+The release's `rewrap-markdown-VERSION.py` can be installed as
+`~/.local/bin/rewrap-markdown` with `install -m 755` to use the same command and
+Git hook as the Swift binary. Python compatibility cases run on Linux CI too.
+
 ### Build From Source
 
-Building requires Swift 5.9 or newer:
+Building on macOS requires Swift 5.9 or newer. Linux CI uses Swift 6.2.1;
+install a matching Linux toolchain from [Swift.org](https://www.swift.org/install/)
+and ensure Python 3.10+, Git, and Make are available for the test suite:
 
 ```sh
 git clone https://github.com/sethdill/rewrap_markdown.git
@@ -150,7 +196,7 @@ make install-cli
 `make install-cli` builds a release executable and copies it to
 `~/.local/bin/rewrap-markdown`. It does not require BBEdit.
 
-#### BBEdit Integrations
+#### BBEdit Integrations (macOS Only)
 
 For BBEdit, use `make install` instead. It installs the executable and the
 standard text filter. The filter points to the installed executable, so it
@@ -226,6 +272,10 @@ To rewrap every commit message in a repository, install the included hook:
 install -m 755 Distribution/Git/commit-msg .git/hooks/commit-msg
 ```
 
+For a downloaded release hook, use `rewrap-markdown-commit-msg` as the source
+path in the command above. Do not overwrite an existing hook without combining
+its behavior. The hook works on Linux and macOS.
+
 The hook rewrites Git's message file only after `rewrap-markdown --commit`
 succeeds. Set `REWRAP_MARKDOWN` in the hook environment if the executable is not
 on Git's command path.
@@ -293,8 +343,27 @@ filtered output.
 make build
 make test
 make test-executable
+make test-smoke
 make dist
 ```
+
+`make dist` stages the native executable, Python script, and Git hook. On macOS
+it also includes the BBEdit assets. `make dist-cli` is the portable subset;
+`make install-cli` and `make uninstall-cli` work on both platforms. Installer
+and BBEdit targets explicitly require macOS.
+
+For fully static Linux release builds, install the matching Swift 6.2.1
+open-source toolchain and official Static Linux SDK (Xcode's Swift toolchain
+cannot use that SDK), then run:
+
+```sh
+make dist-linux LINUX_ARCH=x86_64
+make dist-linux LINUX_ARCH=aarch64
+```
+
+See [RELEASING.md](RELEASING.md) and `.github/workflows/linux-release.yml` for
+the pinned SDK URL/checksum and release validation. Native `make dist` builds
+use the host toolchain and are not the portable static release artifacts.
 
 The wrapping engine lives in `RewrapMarkdownCore`, separate from the
 stdin/stdout executable.

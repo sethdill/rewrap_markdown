@@ -15,6 +15,7 @@ jobs:
   build:
     name: Static Linux ${{ matrix.arch }}
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     container: swift:6.2.1-jammy
     strategy:
       fail-fast: false
@@ -29,7 +30,7 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - name: Install build and test dependencies
-        run: apt-get update && apt-get install -y python3 make libdigest-sha-perl
+        run: apt-get update && apt-get install -y python3 make libdigest-sha-perl file binutils
       - name: Install official Static Linux SDK (matching Swift 6.2.1)
         run: |
           swift sdk install \
@@ -59,6 +60,7 @@ jobs:
   smoke:
     name: Smoke ${{ matrix.arch }} on ${{ matrix.image }}
     needs: build
+    timeout-minutes: 15
     runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
@@ -85,7 +87,9 @@ jobs:
             else
               apt-get update && apt-get install -y --no-install-recommends python3 git ca-certificates
             fi
-            ! command -v swift
+            if command -v swift >/dev/null; then
+              echo 'Runtime test must not have Swift installed' >&2; exit 1
+            fi
             cd artifact
             sha256sum -c *.sha256
             chmod +x rewrap-markdown-*-linux-"$1"
