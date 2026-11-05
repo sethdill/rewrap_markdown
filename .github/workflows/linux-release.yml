@@ -87,19 +87,5 @@ jobs:
           IMAGE: ${{ matrix.image }}
           ARCH: ${{ matrix.arch }}
         run: |
-          docker run --rm -v "$PWD:/work" -w /work "$IMAGE" sh -ec '
-            if command -v apk >/dev/null; then
-              apk add --no-cache python3 git
-            else
-              apt-get update && apt-get install -y --no-install-recommends python3 git ca-certificates
-            fi
-            if command -v swift >/dev/null; then
-              echo 'Runtime test must not have Swift installed' >&2; exit 1
-            fi
-            cd artifact
-            sha256sum -c *.sha256
-            chmod +x rewrap-markdown-*-linux-"$1"
-            cd ..
-            python3 scripts/smoke.py "$PWD/artifact/rewrap-markdown-$(cat VERSION)-linux-$1"
-            python3 scripts/smoke.py python3 Reference/rewrap_markdown.py
-          ' sh "$ARCH"
+          docker run --rm -v "$PWD:/work" -w /work "$IMAGE" \
+            sh scripts/linux-smoke.sh "$ARCH"
