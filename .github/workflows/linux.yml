@@ -1,0 +1,30 @@
+name: Linux
+
+on:
+  push:
+    branches: [main, release/0.3, codex/linux-support]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    name: Swift and Python compatibility (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container: swift:6.2.1-jammy
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install test dependencies
+        run: apt-get update && apt-get install -y python3 make
+      - name: Test Swift core, executable, Python, and commit-msg hook
+        run: make test-executable
