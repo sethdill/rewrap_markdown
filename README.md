@@ -164,7 +164,9 @@ Keep the PATH export in your shell's startup file (for example `~/.bashrc`).
 The binaries use Swift's official Static Linux SDK and need no installed Swift
 runtime. CI executes both architectures natively with Ubuntu 22.04 and 24.04,
 Debian 12, and Alpine 3.22 userlands, checking wrapping, unwrapping, commit
-messages, and the Git hook. Other distributions and older kernels have not been
+messages, and the Git hook. Native Ubuntu VM jobs also verify the README
+installation steps, invocation through `PATH`, and removal on both architectures.
+Other distributions and older kernels have not been
 validated; these tests do not establish compatibility with every Linux system.
 
 ### Python on Linux

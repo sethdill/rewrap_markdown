@@ -89,3 +89,37 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/work" -w /work "$IMAGE" \
             sh scripts/linux-smoke.sh "$ARCH"
+
+  install:
+    name: Install and remove on Linux ${{ matrix.arch }}
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: rewrap-markdown-linux-${{ matrix.arch }}
+          path: artifact
+      - name: Stage release hook
+        run: cp Distribution/Git/commit-msg artifact/rewrap-markdown-commit-msg
+      - name: Reject a corrupt download before installation
+        run: |
+          cp -R artifact corrupt-artifact
+          printf 'corrupt download' >> "corrupt-artifact/rewrap-markdown-$(cat VERSION)-linux-${{ matrix.arch }}"
+          if sh scripts/linux-install-smoke.sh corrupt-artifact; then
+            echo 'Checksum validation accepted a corrupt binary' >&2; exit 1
+          fi
+          test ! -e "$HOME/.local/bin/rewrap-markdown"
+      - name: Follow README installation, test through PATH, and remove
+        run: sh scripts/linux-install-smoke.sh artifact

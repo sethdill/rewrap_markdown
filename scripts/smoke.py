@@ -49,13 +49,17 @@ with tempfile.TemporaryDirectory(prefix='rewrap smoke ') as directory:
     git('config', 'commit.gpgsign', 'false', check=True)
     git('config', 'core.hooksPath', str(repo / '.git/hooks'), check=True)
     hook = repo / '.git/hooks/commit-msg'
-    hook.write_bytes((ROOT / 'Distribution/Git/commit-msg').read_bytes())
+    hook_source = Path(os.environ.get('REWRAP_SMOKE_HOOK', ROOT / 'Distribution/Git/commit-msg'))
+    hook.write_bytes(hook_source.read_bytes())
     hook.chmod(0o755)
     # The hook accepts one executable path; support the Python CLI via a wrapper.
     launcher = repo / 'filter command'
     launcher.write_text('#!/bin/sh\nexec ' + shlex.join(COMMAND) + ' "$@"\n')
     launcher.chmod(0o755)
-    ENV['REWRAP_MARKDOWN'] = str(launcher)
+    if os.environ.get('REWRAP_SMOKE_USE_PATH') == '1':
+        ENV.pop('REWRAP_MARKDOWN', None)
+    else:
+        ENV['REWRAP_MARKDOWN'] = str(launcher)
     message = repo / 'message file'
     message.write_text('Subject\n\nBody is split\nacross lines.\n', encoding='utf-8')
     git('commit', '--allow-empty', '--cleanup=verbatim', '-F', str(message), check=True)

@@ -86,6 +86,14 @@ mode, and successful/failing hooks invoked by Git for both implementations.
 This is userland coverage on GitHub-hosted kernels, not a test of every distro
 kernel or every Linux distribution.
 
+Separate native Ubuntu VM jobs on x86_64 and aarch64 follow the README's
+installation steps: verify the downloaded checksum, install into
+`~/.local/bin`, invoke the command through `PATH` from outside the checkout,
+exercise wrapping/unwrapping/commit mode and the installed Git hook, then remove
+the binary and confirm it is no longer available. They also reject a deliberately
+corrupted download before installation. These jobs run without a job container
+and are required by the reusable release workflow alongside the distro tests.
+
 The `Linux` workflow runs on pull requests and builds these same artifacts. The
 `Release` workflow reuses the build and smoke jobs and waits for them before
 publishing, alongside the unchanged macOS installer pipeline.
@@ -106,11 +114,25 @@ from the release branch with **Publish** disabled and leave **Tag** empty. This
 builds the release-candidate artifacts without creating a GitHub Release.
 
 Before publishing Linux binaries, confirm the build and every runtime smoke job
-passed for the exact release commit. Download both binary/checksum pairs and
-verify the checksums. Actual older kernels, distributions outside the CI matrix,
-and non-container installation remain manual checks before extending the
-compatibility claim. Do not claim those environments based only on static
-linking.
+and native installation jobs passed for the exact release commit. A separate
+Linux host is not required for these checks. Older kernels and distributions
+outside the CI matrix remain unvalidated; test them before extending the
+compatibility claim.
+
+After publishing v0.3 or later, run **Actions > Verify published Linux
+installation > Run workflow**, selecting the release tag as the **tag** input.
+This downloads the actual GitHub Release binary, checksum, and commit-msg hook
+on both architectures, then runs the same installation/removal test. It only
+reads release assets and does not publish or modify a release. The workflow
+must be present on the default branch for manual dispatch, and the selected
+release tag must include the installation test scripts. For example:
+
+```sh
+gh workflow run linux-install.yml --ref main -f tag=v0.3
+```
+
+This final download-to-install check can only run after the release assets
+exist; the pre-publication jobs exercise the exact workflow artifacts instead.
 
 The installer is currently unsigned and not notarized. Before publishing a
 release, download the Actions-built package to a Mac and perform this manual
