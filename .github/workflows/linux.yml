@@ -28,3 +28,17 @@ jobs:
         run: apt-get update && apt-get install -y python3 make
       - name: Test Swift core, executable, Python, and commit-msg hook
         run: make test-executable
+      - name: Exercise Git hook through Git for both implementations
+        run: make test-smoke
+      - name: Check portable distribution targets and macOS guard
+        run: |
+          make dist
+          test -f "dist/rewrap-markdown-$(cat VERSION)-linux-$(uname -m)"
+          test ! -e "dist/Rewrap Markdown (Swift)"
+          if make package-unsigned; then
+            echo 'macOS-only target unexpectedly succeeded' >&2; exit 1
+          fi
+
+  release-binaries:
+    needs: compatibility
+    uses: ./.github/workflows/linux-release.yml
