@@ -30,22 +30,28 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
       - name: Install build and test dependencies
-        run: apt-get update && apt-get install -y python3 make libdigest-sha-perl file binutils
+        run: apt-get update && apt-get install -y python3 make libdigest-sha-perl file binutils curl
       - name: Install official Static Linux SDK (matching Swift 6.2.1)
         run: |
-          swift sdk install \
-            https://download.swift.org/swift-6.2.1-release/static-sdk/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE_static-linux-0.0.1.artifactbundle.tar.gz \
-            --checksum 08e1939a504e499ec871b36826569173103e4562769e12b9b8c2a50f098374ad
+          # Download separately: Swift 6.2.1's URLSession cleanup can crash on
+          # aarch64 after a remote SDK installation has otherwise succeeded.
+          sdk=swift-6.2.1-RELEASE_static-linux-0.0.1.artifactbundle.tar.gz
+          curl --fail --location --retry 3 --output "/tmp/$sdk" \
+            "https://download.swift.org/swift-6.2.1-release/static-sdk/swift-6.2.1-RELEASE/$sdk"
+          echo "08e1939a504e499ec871b36826569173103e4562769e12b9b8c2a50f098374ad  /tmp/$sdk" | sha256sum -c -
+          swift sdk install "/tmp/$sdk"
       - name: Build static binary and checksum
         run: make dist-linux LINUX_ARCH=${{ matrix.arch }}
       - name: Verify static ELF and run full compatibility suite against artifact
         run: |
           binary="$PWD/dist/rewrap-markdown-$(cat VERSION)-linux-${{ matrix.arch }}"
           file "$binary"
-          if readelf -l "$binary" | grep -q INTERP; then
+          readelf -l "$binary" > /tmp/program-headers
+          readelf -d "$binary" > /tmp/dynamic-section
+          if grep -q INTERP /tmp/program-headers; then
             echo 'Unexpected ELF interpreter' >&2; exit 1
           fi
-          if readelf -d "$binary" | grep -q NEEDED; then
+          if grep -q NEEDED /tmp/dynamic-section; then
             echo 'Unexpected shared library dependency' >&2; exit 1
           fi
           REWRAP_MARKDOWN_EXECUTABLE="$binary" swift test
