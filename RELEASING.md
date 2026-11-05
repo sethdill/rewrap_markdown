@@ -185,3 +185,9 @@ Never move a published source tag or overwrite an archive to fix a release.
 The formula pins commit archives; a changed digest requires investigation.
 The unsigned installer is ineligible for a cask: require signing, notarization,
 and normal Gatekeeper acceptance before proposing one.
+
+On Linux, this formula deliberately retains Homebrew Swift as a runtime
+dependency. Recheck the formula after Swift upgrades; if runtime compatibility
+changes, rebuild and increment the formula revision in the tap. A successful
+upstream Swift-container test alone does not validate Homebrew's toolchain or
+runtime linkage.

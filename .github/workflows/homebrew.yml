@@ -2,7 +2,7 @@ name: Homebrew
 
 on:
   push:
-    branches: [codex/homebrew-support, release/0.3, main]
+    branches: [release/0.3, main]
     paths: ['Packaging/homebrew/**', 'scripts/update-homebrew.py', '.github/workflows/homebrew.yml']
   pull_request:
     paths: ['Packaging/homebrew/**', 'scripts/update-homebrew.py', '.github/workflows/homebrew.yml']
@@ -23,6 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: Homebrew/actions/setup-homebrew@55301c8cac0982bc2fbeb71275fa0b71b963bdb1
+        if: matrix.runner != 'macos-26-intel'
+        timeout-minutes: 5
+      - name: Update preinstalled Intel Homebrew
+        if: matrix.runner == 'macos-26-intel'
+        timeout-minutes: 5
+        env:
+          HOMEBREW_GITHUB_API_TOKEN: ${{ github.token }}
+          HOMEBREW_NO_INSTALL_FROM_API: ""
+        run: brew update --verbose
       - name: Prepare local tap (never publish)
         run: |
           git config --global user.name Homebrew
