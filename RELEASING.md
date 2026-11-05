@@ -168,3 +168,69 @@ workflow creates it.
 
 For a tag that already exists, run the `Release` workflow manually from GitHub
 Actions, enable **Publish**, and enter the tag name, such as `v0.3`.
+
+## v0.3 publishing checklist
+
+After pushing `v0.3`, the release owner should complete these follow-ups.
+Seth has approved creating the public `sethdill/homebrew-tap` repository and
+publishing the Rewrap Markdown formula after v0.3 ships, the formula is pinned
+to the final release commit, and the Homebrew checks pass. Keep the roadmap
+items open and the README's Homebrew status as planned until installation
+from the public tap has been verified.
+
+- [ ] Confirm the GitHub Release is live and run **Verify published Linux
+  installation** as described under [Build Artifacts](#build-artifacts).
+- [ ] Resolve `v0.3` to its full commit SHA and run `scripts/update-homebrew.py`
+  with version `0.3` and that SHA. Review the resulting version, URL, and SHA-256.
+  Follow the [formula update procedure](Packaging/homebrew/README.md#release-updates-and-separate-repository-handoff).
+- [ ] Run style, strict online audit, source install, formula tests, and linkage
+  on Intel and Apple Silicon macOS and on x86_64 and ARM64 Linux using the final pin.
+- [ ] Create the public `sethdill/homebrew-tap` repository. Transfer the tested
+  formula, open the separate tap PR, and publish after review.
+- [ ] Verify `brew install sethdill/tap/rewrap-markdown` from clean macOS and
+  Linux environments. Update the project README and roadmap once it works.
+
+## Homebrew maintenance
+
+Never move a published source tag or overwrite an archive to fix a release.
+The formula pins commit archives; a changed digest requires investigation.
+The unsigned installer is ineligible for a cask: require signing, notarization,
+and normal Gatekeeper acceptance before proposing one.
+
+On Linux, this formula deliberately retains Homebrew Swift as a runtime
+dependency. Recheck the formula after Swift upgrades; if runtime compatibility
+changes, rebuild and increment the formula revision in the tap. A successful
+upstream Swift-container test alone does not validate Homebrew's toolchain or
+runtime linkage.
+
+### Initial Homebrew validation
+
+The [native Homebrew matrix](https://github.com/sethdill/rewrap_markdown/actions/runs/41961286964)
+passed at implementation commit `9047e8b` using the provisional 0.3 formula
+pinned to source commit `97b8ff23352ce8b46fcdc372404d3d0300265edb`:
+
+| Native runner | Style | Strict online audit | Source install | Formula test | Linkage | Removal |
+| --- | --- | --- | --- | --- | --- | --- |
+| macOS 26 Apple Silicon | Pass | Pass | Pass | Pass | Pass | Pass |
+| macOS 26 Intel | Pass | Pass | Pass | Pass | Pass | Pass |
+| Ubuntu 24.04 x86_64 | Pass | Pass | Pass | Pass | Pass | Pass |
+| Ubuntu 24.04 ARM64 | Pass | Pass | Pass | Pass | Pass | Pass |
+
+Linux used Homebrew Swift 6.4.2, not a preinstalled Swift container toolchain.
+The formula test covers version reporting, ordinary wrapping, unwrap, and
+commit mode with subject/trailer preservation. The separate
+[Linux regression workflow](https://github.com/sethdill/rewrap_markdown/actions/runs/41961286874)
+also passed, including the existing static-build and distribution checks.
+
+A local Intel Mac with macOS 13, Homebrew 5.0.6, and Apple Swift 5.9.2 passed
+source installation, style, strict online audit, all formula assertions, and
+linkage; the temporary CLI and local tap were removed afterward. This older
+host is outside current Homebrew Tier 1, so use the native matrix as the main
+supported-platform evidence.
+
+The updater reproduced the formula from the real pinned GitHub archive with
+no diff. A separate check using the same archive confirmed that a mismatched
+requested VERSION is rejected before writing. These results validate the
+provisional source formula; repeat the matrix for the final release pin and
+after transfer to the approved tap. Public-tap installation remains untested
+because no tap has been published.

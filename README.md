@@ -10,6 +10,7 @@
 - [BBEdit](#bbedit)
 - [Other Editors](#other-editors)
 - [Development](#development)
+- [Roadmap](ROADMAP.md)
 - [License](#license)
 
 ## Rewrap Prose
@@ -78,6 +79,14 @@ For a deliberately excessive tour, compare the
 [wrapped demo document](Samples/gfm_supported_wrapped.md).
 
 ## Install
+
+### Homebrew (planned for 0.3)
+
+The intended CLI-only installation is `brew install sethdill/tap/rewrap-markdown`.
+The tap is **not published yet**; this command is not currently available.
+See the [provisional formula, validation, and launch checklist](Packaging/homebrew/README.md).
+Homebrew installation will not install BBEdit integrations or modify its support
+folders. Use the installation options below until the tap launches.
 
 The command-line tool supports macOS 12 or later and Linux. BBEdit integration
 and the `.pkg` installer require macOS; the integrations have been tested with
