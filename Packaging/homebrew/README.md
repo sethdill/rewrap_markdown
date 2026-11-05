@@ -1,12 +1,11 @@
-# Provisional Homebrew tap
+# Homebrew formula
 
-This directory stages the formula for the public `sethdill/homebrew-tap` repository.
-Seth has approved creating the tap and publishing the formula after v0.3 ships,
-the formula is pinned to the final release commit, and the Homebrew checks pass.
+The [public tap](https://github.com/sethdill/homebrew-tap) is the authoritative
+source for installation. This directory retains a tested staging copy.
 The [v0.3 publishing checklist](../../RELEASING.md#v03-publishing-checklist)
-records the launch steps.
+records the launch and validation.
 
-Once the tap is published, install with:
+Install with:
 
 ```sh
 brew install sethdill/tap/rewrap-markdown
@@ -18,11 +17,9 @@ folders. Homebrew handles linking, upgrades, and `brew uninstall`.
 
 ## Source versus release binaries
 
-Use a **source formula**. The initial URL pins the full Linux-support merge
-commit `97b8ff23352ce8b46fcdc372404d3d0300265edb`, with a SHA-256 calculated from
-the downloaded archive. Its `VERSION` is 0.3, but it is a provisional snapshot:
-v0.3 has not shipped. Replace it with the reviewed v0.3 release commit before
-launch; never publish this snapshot as the stable release.
+The **source formula** pins the full v0.3 release commit
+`edbe983f49e62535004e32bd2c1edefb0bd4dd7f` and verifies the SHA-256
+of its archive before building.
 
 The package has no external Swift package dependencies. macOS builds use Xcode
 15 or later. Linux uses Homebrew's `swift` formula and retains it as a runtime
@@ -34,8 +31,7 @@ targets. SwiftPM's nested sandbox is disabled inside Homebrew's build sandbox.
 
 Release binaries would avoid a compiler download and Linux runtime dependency,
 and the new static Linux assets already have broader distro smoke coverage.
-However, currently published v0.2 assets are macOS-only and lack `--unwrap` and
-`--commit`. Versioned GitHub release assets can also be replaced by the current
+Versioned GitHub release assets can be replaced by the current
 release workflow; they are not immutable merely because their URL has a tag.
 Source pinned to a commit offers one checksummed input across architectures,
 transparent builds, and no per-platform asset synchronization. Checksums fail
@@ -92,24 +88,13 @@ the commit against the release tag and verify the digest independently with
 `curl -fL URL -o source.tar.gz && shasum -a 256 source.tar.gz`.
 Run the entire native matrix after each update; preserve evidence in the PR.
 
-After v0.3 ships and the final formula passes the native matrix, create
-the public `sethdill/homebrew-tap` repository and follow these steps:
-
-1. Copy `Formula/rewrap-markdown.rb` from this directory to the tap's `Formula/`.
-2. Add a user-facing README with installation, upgrade, uninstall, supported
-   platforms, and a link to the upstream issue tracker.
-3. Port the Homebrew CI matrix; in the real tap, use its checked-out formula
-   rather than running `tap-new` over the tap itself. Run style, audit, install,
-   test, and linkage checks for every formula change.
-4. Open and review a tap PR per upstream release. The updater can target that
-   checkout with `--output /path/to/homebrew-tap/Formula/rewrap-markdown.rb`.
-5. Merge the approved tap PR, verify the public installation command on clean
-   macOS and Linux machines, then mark availability in upstream README/roadmap.
-
-Keep this provisional formula synchronized until the handoff. Afterward the tap
-is authoritative; remove the duplicate upstream copy or explicitly keep it as a
-tested staging copy. Source formulae need no bottle publishing credentials.
-The generated `tap-new` bottle publishing workflows are not required here.
+For each upstream release, transfer the validated formula to the tap and open a
+tap PR. The updater can target the tap checkout with
+`--output /path/to/homebrew-tap/Formula/rewrap-markdown.rb`.
+Review the PR and run the native style, audit, source install, formula tests,
+linkage, and removal checks. After merging, verify the public installation
+command on clean macOS and Linux runners. Keep the upstream staging copy
+synchronized with the tap.
 
 ## Installer cask gate
 

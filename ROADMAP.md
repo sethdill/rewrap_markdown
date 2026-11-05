@@ -1,7 +1,7 @@
 # Roadmap
 
-This is a release planning checklist, not a release commitment. Version 0.2 is
-published; 0.3 is in preparation on `release/0.3`.
+Version [0.3](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.3)
+is published. Later releases list planned work.
 
 ## 0.3
 
@@ -24,7 +24,7 @@ published; 0.3 is in preparation on `release/0.3`.
 
 - [x] Merge native x86_64 and ARM64 compatibility, static builds, distro smoke
   tests, and installation/removal validation.
-- [ ] Verify installation from published v0.3 assets after release.
+- [x] Verify installation from published v0.3 assets on x86_64 and ARM64.
 
 ### Homebrew CLI installation
 
@@ -35,15 +35,12 @@ published; 0.3 is in preparation on `release/0.3`.
 - [x] Complete the Homebrew matrix and record results before merging.
 - [x] Obtain Seth's approval to create and publish the tap after v0.3 ships
   and the formula passes validation against the final release commit.
-- [ ] Pin the final v0.3 release commit, create the public tap, and publish the
-  formula.
-- [ ] Verify `brew install sethdill/tap/rewrap-markdown` from the public tap.
+- [x] Pin the final v0.3 release commit and publish the formula in the
+  [public tap](https://github.com/sethdill/homebrew-tap).
+- [x] Verify `brew install sethdill/tap/rewrap-markdown` on macOS and Linux.
 
-Follow the [v0.3 publishing checklist](RELEASING.md#v03-publishing-checklist)
-when tagging the release. See
-[the tap handoff](Packaging/homebrew/README.md). Homebrew installs the CLI only
-and never changes BBEdit support folders. The provisional formula is staged
-upstream; the separate tap will own the user-facing installation path.
+See the [completed publishing checklist](RELEASING.md#v03-publishing-checklist)
+and the [tap maintenance notes](Packaging/homebrew/README.md).
 
 ## Later releases
 

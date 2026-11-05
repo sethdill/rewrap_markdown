@@ -171,24 +171,20 @@ Actions, enable **Publish**, and enter the tag name, such as `v0.3`.
 
 ## v0.3 publishing checklist
 
-After pushing `v0.3`, the release owner should complete these follow-ups.
-Seth has approved creating the public `sethdill/homebrew-tap` repository and
-publishing the Rewrap Markdown formula after v0.3 ships, the formula is pinned
-to the final release commit, and the Homebrew checks pass. Keep the roadmap
-items open and the README's Homebrew status as planned until installation
-from the public tap has been verified.
-
-- [ ] Confirm the GitHub Release is live and run **Verify published Linux
-  installation** as described under [Build Artifacts](#build-artifacts).
-- [ ] Resolve `v0.3` to its full commit SHA and run `scripts/update-homebrew.py`
-  with version `0.3` and that SHA. Review the resulting version, URL, and SHA-256.
-  Follow the [formula update procedure](Packaging/homebrew/README.md#release-updates-and-separate-repository-handoff).
-- [ ] Run style, strict online audit, source install, formula tests, and linkage
-  on Intel and Apple Silicon macOS and on x86_64 and ARM64 Linux using the final pin.
-- [ ] Create the public `sethdill/homebrew-tap` repository. Transfer the tested
-  formula, open the separate tap PR, and publish after review.
-- [ ] Verify `brew install sethdill/tap/rewrap-markdown` from clean macOS and
-  Linux environments. Update the project README and roadmap once it works.
+- [x] Publish [v0.3](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.3)
+  and verify [installation from the published Linux assets](https://github.com/sethdill/rewrap_markdown/actions/runs/42052232676)
+  on x86_64 and ARM64.
+- [x] Run `scripts/update-homebrew.py` for `0.3` at commit
+  `edbe983f49e62535004e32bd2c1edefb0bd4dd7f` and independently verify the
+  archive SHA-256.
+- [x] Pass style, strict online audit, source install, formula tests, linkage,
+  and removal on all four runners in the
+  [final-pin Homebrew matrix](https://github.com/sethdill/rewrap_markdown/actions/runs/42052159448).
+- [x] Publish the tested formula through the
+  [tap PR](https://github.com/sethdill/homebrew-tap/pull/1).
+- [x] Verify `brew install sethdill/tap/rewrap-markdown` on clean native macOS
+  and Linux runners and update the project README and roadmap.
+  [Public installation matrix](https://github.com/sethdill/homebrew-tap/actions/runs/42054876568)
 
 ## Homebrew maintenance
 
@@ -230,7 +226,6 @@ supported-platform evidence.
 
 The updater reproduced the formula from the real pinned GitHub archive with
 no diff. A separate check using the same archive confirmed that a mismatched
-requested VERSION is rejected before writing. These results validate the
-provisional source formula; repeat the matrix for the final release pin and
-after transfer to the approved tap. Public-tap installation remains untested
-because no tap has been published.
+requested VERSION is rejected before writing. These results cover the
+provisional pin. The publishing checklist above records the final release pin
+and public tap verification.

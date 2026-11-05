@@ -80,13 +80,15 @@ For a deliberately excessive tour, compare the
 
 ## Install
 
-### Homebrew (planned for 0.3)
+### Homebrew
 
-The intended CLI-only installation is `brew install sethdill/tap/rewrap-markdown`.
-The tap is **not published yet**; this command is not currently available.
-See the [provisional formula, validation, and launch checklist](Packaging/homebrew/README.md).
-Homebrew installation will not install BBEdit integrations or modify its support
-folders. Use the installation options below until the tap launches.
+```sh
+brew install sethdill/tap/rewrap-markdown
+```
+
+The [public tap](https://github.com/sethdill/homebrew-tap) installs the CLI from
+checksummed source on macOS and Linux. For BBEdit integration, use the macOS
+installer below.
 
 The command-line tool supports macOS 12 or later and Linux. BBEdit integration
 and the `.pkg` installer require macOS; the integrations have been tested with
@@ -154,8 +156,6 @@ From the [releases page](https://github.com/sethdill/rewrap_markdown/releases),
 choose a release starting with 0.3 and download both
 `rewrap-markdown-VERSION-linux-x86_64` (Intel/AMD) or
 `rewrap-markdown-VERSION-linux-aarch64` (ARM64), and its `.sha256` file.
-The 0.2 release has no Linux binaries. Before 0.3 is published, build from
-source or use the tested candidate artifacts from GitHub Actions.
 
 In the directory containing the downloaded files:
 
