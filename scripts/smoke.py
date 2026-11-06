@@ -28,6 +28,27 @@ source = '- Café and naïve\n  prose with `inline code`.\n\n```\nkeep   spaces\
 unwrapped = '- Café and naïve prose with `inline code`.\n\n```\nkeep   spaces\n```\n'
 check(['--unwrap'], source, unwrapped)
 check(['0'], source, unwrapped)
+release_note = (
+    '* [508391] Fixed a JavaScript syntax coloring bug in which a regular\n'
+    "expression inside a template literal's `${...}` expression (such as\n"
+    r'`/\//g` ) could cause everything after the template literal to be' '\n'
+    'colored as part of it. This also affected TypeScript and ActionScript,\n'
+    'which use the same language module.\n'
+)
+table = '| A | B |\n| --- | --- |\n| 1 | 2 |\n'
+for mode in ('--unwrap', '0'):
+    check([mode], release_note, ' '.join(release_note.splitlines()) + '\n')
+    check([mode], '1. First line\n continuation\n   more text.\n2. Next item.\n',
+          '1. First line continuation more text.\n2. Next item.\n')
+    check([mode], '- ```\n  keep   spaces\noutside the fence\nand the list.\n',
+          '- ```\n  keep   spaces\noutside the fence and the list.\n')
+    check([mode], '- First item.\n\nOutside\nthe list.\n',
+          '- First item.\n\nOutside the list.\n')
+    check([mode], '- Outer item\n  - Inner item\ncontinues here.\n',
+          '- Outer item\n  - Inner item continues here.\n')
+    check([mode], '- First item.\n' + table, '- First item.\n' + table)
+check(['17'], '- First line\ncontinues here.\n',
+      '- First line\n  continues here.\n')
 commit = ('Subject stays exactly as written\n\nThese words should wrap across lines.\n\n'
           '# Keep this comment exactly as written.\n\nSigned-off-by: Tester <test@example.com>\n')
 wrapped = commit.replace('These words should wrap across lines.',

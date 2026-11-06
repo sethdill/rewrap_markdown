@@ -259,15 +259,20 @@ def nested_width(width: int, prefix_width: int) -> int:
 
 
 def process_block(lines: list[str], width: int) -> list[str]:
-    """
-    Process a self-contained sequence of raw lines (already dedented to
-    this nesting level) and return the rewrapped output lines.
-    """
+    rendered, _ = process_blocks(lines, width, set())
+    return rendered
+
+
+def process_blocks(
+    lines: list[str], width: int, lazy_lines: set[int]
+) -> tuple[list[str], int]:
+    # A line missing list indentation can extend a paragraph, but cannot
+    # start a block or extend a protected block such as a code fence.
     out: list[str] = []
     i: int = 0
     n: int = len(lines)
 
-    while i < n:
+    while i < n and i not in lazy_lines:
         line: str = lines[i]
 
         # Blank line: pass through as-is.
@@ -283,7 +288,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
             fence_len = len(fm.group(2))
             block = [line]
             i += 1
-            while i < n:
+            while i < n and i not in lazy_lines:
                 block.append(lines[i])
                 close_m = re.match(
                     r"^ {0,3}(" + re.escape(fence_char) + r"{" + str(fence_len) + r",})\s*$",
@@ -321,7 +326,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
 
         # Indented code block: copy verbatim.
         if leading_spaces(line) >= 4:
-            while i < n and (BLANK_RE.match(lines[i]) or leading_spaces(lines[i]) >= 4):
+            while i < n and i not in lazy_lines and (BLANK_RE.match(lines[i]) or leading_spaces(lines[i]) >= 4):
                 out.append(lines[i].rstrip())
                 i += 1
             continue
@@ -335,6 +340,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
             and not BULLET_RE.match(line)
             and not ORDERED_RE.match(line)
             and i + 1 < n
+            and i + 1 not in lazy_lines
             and (SETEXT_H1_RE.match(lines[i + 1]) or SETEXT_H2_RE.match(lines[i + 1]))
         ):
             out.append(line.rstrip())
@@ -344,14 +350,14 @@ def process_block(lines: list[str], width: int) -> list[str]:
 
         # HTML block: copy verbatim until a blank line.
         if is_html_block_start(line):
-            while i < n and not BLANK_RE.match(lines[i]):
+            while i < n and i not in lazy_lines and not BLANK_RE.match(lines[i]):
                 out.append(lines[i].rstrip())
                 i += 1
             continue
 
         # HTML comment: copy verbatim until the closing marker.
         if HTML_COMMENT_START_RE.match(line):
-            while i < n:
+            while i < n and i not in lazy_lines:
                 out.append(lines[i].rstrip())
                 is_end = HTML_COMMENT_END_RE.search(lines[i]) is not None
                 i += 1
@@ -363,12 +369,13 @@ def process_block(lines: list[str], width: int) -> list[str]:
         if (
             is_table_row(line)
             and i + 1 < n
+            and i + 1 not in lazy_lines
             and TABLE_DELIM_RE.match(lines[i + 1])
         ):
             out.append(line.rstrip())
             out.append(lines[i + 1].rstrip())
             i += 2
-            while i < n and is_table_row(lines[i]) and not BLANK_RE.match(lines[i]):
+            while i < n and i not in lazy_lines and is_table_row(lines[i]) and not BLANK_RE.match(lines[i]):
                 out.append(lines[i].rstrip())
                 i += 1
             continue
@@ -379,7 +386,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
         bqm = BLOCKQUOTE_RE.match(line)
         if bqm:
             inner = []
-            while i < n:
+            while i < n and i not in lazy_lines:
                 m = BLOCKQUOTE_RE.match(lines[i])
                 if not m:
                     break
@@ -395,11 +402,11 @@ def process_block(lines: list[str], width: int) -> list[str]:
         fnm = FOOTNOTE_RE.match(line)
         if fnm:
             marker = "[^{}]: ".format(fnm.group(1))
-            content_col = len(marker)
             first_text = line[fnm.end(2):]
-            item_lines, i = gather_indented_block(lines, i, content_col, first_text)
-            rendered = process_block(item_lines, nested_width(width, content_col))
-            out.extend(render_hanging(rendered, marker, " " * content_col))
+            rendered, i = process_list_item(
+                lines, i, marker, first_text, width, lazy_lines, allows_lazy_lines=False
+            )
+            out.extend(rendered)
             continue
 
         # Bulleted list item.
@@ -407,10 +414,10 @@ def process_block(lines: list[str], width: int) -> list[str]:
         if blm:
             indent, bullet, _spacing, first_text = blm.groups()
             marker = indent + bullet + " "
-            content_col = len(marker)
-            item_lines, i = gather_indented_block(lines, i, content_col, first_text)
-            rendered = process_block(item_lines, nested_width(width, content_col))
-            out.extend(render_hanging(rendered, marker, " " * content_col))
+            rendered, i = process_list_item(
+                lines, i, marker, first_text, width, lazy_lines, allows_lazy_lines=True
+            )
+            out.extend(rendered)
             continue
 
         # Ordered list item.
@@ -418,10 +425,10 @@ def process_block(lines: list[str], width: int) -> list[str]:
         if olm:
             indent, num, punct, _spacing, first_text = olm.groups()
             marker = indent + num + punct + " "
-            content_col = len(marker)
-            item_lines, i = gather_indented_block(lines, i, content_col, first_text)
-            rendered = process_block(item_lines, nested_width(width, content_col))
-            out.extend(render_hanging(rendered, marker, " " * content_col))
+            rendered, i = process_list_item(
+                lines, i, marker, first_text, width, lazy_lines, allows_lazy_lines=True
+            )
+            out.extend(rendered)
             continue
 
         # Otherwise: plain paragraph. Gather contiguous non-blank lines that
@@ -433,7 +440,7 @@ def process_block(lines: list[str], width: int) -> list[str]:
             i += 1
         out.extend(wrap_paragraph_text(para, width))
 
-    return out
+    return out, i
 
 
 def starts_new_block(line: str) -> bool:
@@ -453,21 +460,20 @@ def starts_new_block(line: str) -> bool:
     )
 
 
-def gather_indented_block(
+def process_list_item(
     lines: list[str],
     i: int,
-    content_col: int,
-    first_text: str
+    marker: str,
+    first_text: str,
+    width: int,
+    parent_lazy_lines: set[int],
+    *,
+    allows_lazy_lines: bool,
 ) -> tuple[list[str], int]:
-    """
-    Collect the lines belonging to a list/footnote item starting at index
-    i (whose marker occupies the first `content_col` columns), including
-    any further-indented continuation lines and nested blocks, plus blank
-    lines that separate paragraphs within the same item (a "loose" item).
-    Returns (item_lines_dedented, next_index).
-    """
+    content_col = len(marker)
     n = len(lines)
     item = [first_text]
+    lazy_lines: set[int] = set()
     j = i + 1
     
     while j < n:
@@ -477,7 +483,7 @@ def gather_indented_block(
             k = j
             while k < n and BLANK_RE.match(lines[k]):
                 k += 1
-            if k < n and leading_spaces(lines[k]) >= content_col:
+            if k < n and k not in parent_lazy_lines and leading_spaces(lines[k]) >= content_col:
                 # keep the blank(s), then continue with next indented line
                 while j < k:
                     item.append("")
@@ -486,14 +492,29 @@ def gather_indented_block(
             else:
                 break
 
-        if leading_spaces(lines[j]) >= content_col:
+        indent = leading_spaces(lines[j])
+        if j not in parent_lazy_lines and indent >= content_col:
             item.append(lines[j][content_col:])
             j += 1
             continue
 
-        break
+        if not allows_lazy_lines:
+            break
+        text = lines[j][indent:]
+        if starts_new_block(text) or (
+            is_table_row(lines[j])
+            and j + 1 < n
+            and j + 1 not in parent_lazy_lines
+            and TABLE_DELIM_RE.match(lines[j + 1])
+        ):
+            break
+        lazy_lines.add(len(item))
+        item.append(text)
+        j += 1
 
-    return item, j
+    rendered, consumed = process_blocks(item, nested_width(width, content_col), lazy_lines)
+    # Each gathered line corresponds to one source line, including the marker line.
+    return render_hanging(rendered, marker, " " * content_col), i + consumed
 
 
 def render_hanging(

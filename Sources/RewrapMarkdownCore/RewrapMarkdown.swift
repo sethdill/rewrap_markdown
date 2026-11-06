@@ -98,10 +98,18 @@ private let inlineAtomic = RegexPattern(
 )
 
 private func processBlock(_ lines: [String], width: Int) -> [String] {
+    processBlock(lines, width: width, lazyLines: []).rendered
+}
+
+// A line missing list indentation can extend a paragraph, but cannot start
+// a block or extend a protected block such as a code fence.
+private func processBlock(
+    _ lines: [String], width: Int, lazyLines: Set<Int>
+) -> (rendered: [String], consumed: Int) {
     var output: [String] = []
     var i = 0
 
-    while i < lines.count {
+    while i < lines.count, !lazyLines.contains(i) {
         let line = lines[i]
 
         if blank.matches(line) {
@@ -117,7 +125,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
             let closingFence = RegexPattern(#"^ {0,3}("# + NSRegularExpression.escapedPattern(for: fenceChar) + #"{\#(fenceLength),})\s*$"#)
             var block = [line]
             i += 1
-            while i < lines.count {
+            while i < lines.count, !lazyLines.contains(i) {
                 block.append(lines[i])
                 let isClose = closingFence.matches(lines[i])
                 i += 1
@@ -154,7 +162,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
         }
 
         if leadingSpaces(line) >= 4 {
-            while i < lines.count, blank.matches(lines[i]) || leadingSpaces(lines[i]) >= 4 {
+            while i < lines.count, !lazyLines.contains(i), blank.matches(lines[i]) || leadingSpaces(lines[i]) >= 4 {
                 output.append(trimRight(lines[i]))
                 i += 1
             }
@@ -165,7 +173,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
            !isBlockquote(line),
            bullet.firstMatch(in: line) == nil,
            ordered.firstMatch(in: line) == nil,
-           i + 1 < lines.count,
+           i + 1 < lines.count, !lazyLines.contains(i + 1),
            setextH1.matches(lines[i + 1]) || setextH2.matches(lines[i + 1]) {
             output.append(trimRight(line))
             output.append(trimRight(lines[i + 1]))
@@ -174,7 +182,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
         }
 
         if isHTMLBlockStart(line) {
-            while i < lines.count, !blank.matches(lines[i]) {
+            while i < lines.count, !lazyLines.contains(i), !blank.matches(lines[i]) {
                 output.append(trimRight(lines[i]))
                 i += 1
             }
@@ -182,7 +190,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
         }
 
         if htmlCommentStart.matches(line) {
-            while i < lines.count {
+            while i < lines.count, !lazyLines.contains(i) {
                 output.append(trimRight(lines[i]))
                 let isEnd = htmlCommentEnd.matches(lines[i])
                 i += 1
@@ -193,11 +201,11 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
             continue
         }
 
-        if isTableRow(line), i + 1 < lines.count, tableDelimiter.matches(lines[i + 1]) {
+        if isTableRow(line), i + 1 < lines.count, !lazyLines.contains(i + 1), tableDelimiter.matches(lines[i + 1]) {
             output.append(trimRight(line))
             output.append(trimRight(lines[i + 1]))
             i += 2
-            while i < lines.count, isTableRow(lines[i]), !blank.matches(lines[i]) {
+            while i < lines.count, !lazyLines.contains(i), isTableRow(lines[i]), !blank.matches(lines[i]) {
                 output.append(trimRight(lines[i]))
                 i += 1
             }
@@ -206,7 +214,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
 
         if blockquote.firstMatch(in: line) != nil {
             var inner: [String] = []
-            while i < lines.count, let match = blockquote.firstMatch(in: lines[i]) {
+            while i < lines.count, !lazyLines.contains(i), let match = blockquote.firstMatch(in: lines[i]) {
                 inner.append(match[2])
                 i += 1
             }
@@ -217,32 +225,35 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
 
         if let match = footnote.firstMatch(in: line) {
             let marker = "[^\(match[1])]: "
-            let contentColumn = marker.count
             let firstText = substring(line, fromUTF16Offset: match.rangeEnd(2))
-            let gathered = gatherIndentedBlock(lines, start: i, contentColumn: contentColumn, firstText: firstText)
-            let rendered = processBlock(gathered.lines, width: nestedWidth(width, removing: contentColumn))
-            output.append(contentsOf: renderHanging(rendered, firstPrefix: marker, restPrefix: String(repeating: " ", count: contentColumn)))
-            i = gathered.nextIndex
+            let item = processListItem(
+                lines, start: i, marker: marker, firstText: firstText, width: width,
+                parentLazyLines: lazyLines, allowsLazyLines: false
+            )
+            output.append(contentsOf: item.rendered)
+            i = item.nextIndex
             continue
         }
 
         if let match = bullet.firstMatch(in: line) {
             let marker = match[1] + match[2] + " "
-            let contentColumn = marker.count
-            let gathered = gatherIndentedBlock(lines, start: i, contentColumn: contentColumn, firstText: match[4])
-            let rendered = processBlock(gathered.lines, width: nestedWidth(width, removing: contentColumn))
-            output.append(contentsOf: renderHanging(rendered, firstPrefix: marker, restPrefix: String(repeating: " ", count: contentColumn)))
-            i = gathered.nextIndex
+            let item = processListItem(
+                lines, start: i, marker: marker, firstText: match[4], width: width,
+                parentLazyLines: lazyLines, allowsLazyLines: true
+            )
+            output.append(contentsOf: item.rendered)
+            i = item.nextIndex
             continue
         }
 
         if let match = ordered.firstMatch(in: line) {
             let marker = match[1] + match[2] + match[3] + " "
-            let contentColumn = marker.count
-            let gathered = gatherIndentedBlock(lines, start: i, contentColumn: contentColumn, firstText: match[5])
-            let rendered = processBlock(gathered.lines, width: nestedWidth(width, removing: contentColumn))
-            output.append(contentsOf: renderHanging(rendered, firstPrefix: marker, restPrefix: String(repeating: " ", count: contentColumn)))
-            i = gathered.nextIndex
+            let item = processListItem(
+                lines, start: i, marker: marker, firstText: match[5], width: width,
+                parentLazyLines: lazyLines, allowsLazyLines: true
+            )
+            output.append(contentsOf: item.rendered)
+            i = item.nextIndex
             continue
         }
 
@@ -255,7 +266,7 @@ private func processBlock(_ lines: [String], width: Int) -> [String] {
         output.append(contentsOf: wrapParagraphText(paragraph, width: width))
     }
 
-    return output
+    return (output, i)
 }
 
 private func tokenizeInline(_ text: String) -> [String] {
@@ -432,13 +443,18 @@ private func startsNewBlock(_ line: String) -> Bool {
         || leadingSpaces(line) >= 4
 }
 
-private func gatherIndentedBlock(
+private func processListItem(
     _ lines: [String],
     start i: Int,
-    contentColumn: Int,
-    firstText: String
-) -> (lines: [String], nextIndex: Int) {
+    marker: String,
+    firstText: String,
+    width: Int,
+    parentLazyLines: Set<Int>,
+    allowsLazyLines: Bool
+) -> (rendered: [String], nextIndex: Int) {
+    let contentColumn = marker.count
     var item = [firstText]
+    var lazyLines: Set<Int> = []
     var j = i + 1
 
     while j < lines.count {
@@ -447,7 +463,7 @@ private func gatherIndentedBlock(
             while k < lines.count, blank.matches(lines[k]) {
                 k += 1
             }
-            if k < lines.count, leadingSpaces(lines[k]) >= contentColumn {
+            if k < lines.count, !parentLazyLines.contains(k), leadingSpaces(lines[k]) >= contentColumn {
                 while j < k {
                     item.append("")
                     j += 1
@@ -457,16 +473,29 @@ private func gatherIndentedBlock(
             break
         }
 
-        if leadingSpaces(lines[j]) >= contentColumn {
+        let indent = leadingSpaces(lines[j])
+        if !parentLazyLines.contains(j), indent >= contentColumn {
             item.append(substring(lines[j], fromUTF16Offset: contentColumn))
             j += 1
             continue
         }
 
-        break
+        guard allowsLazyLines else { break }
+        let text = substring(lines[j], fromUTF16Offset: indent)
+        if startsNewBlock(text)
+            || (isTableRow(lines[j]) && j + 1 < lines.count
+                && !parentLazyLines.contains(j + 1) && tableDelimiter.matches(lines[j + 1])) {
+            break
+        }
+        lazyLines.insert(item.count)
+        item.append(text)
+        j += 1
     }
 
-    return (item, j)
+    let parsed = processBlock(item, width: nestedWidth(width, removing: contentColumn), lazyLines: lazyLines)
+    let rendered = renderHanging(parsed.rendered, firstPrefix: marker, restPrefix: String(repeating: " ", count: contentColumn))
+    // Each gathered line corresponds to one source line, including the marker line.
+    return (rendered, i + parsed.consumed)
 }
 
 private func renderHanging(_ contentLines: [String], firstPrefix: String, restPrefix: String) -> [String] {
