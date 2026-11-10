@@ -44,6 +44,13 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 
 ## Later releases
 
+### Punctuation repair
+
+- [ ] Define when opt-in `--repair` should remove spaces before punctuation
+  following inline spans, for example changing `` `code` , `` to
+  `` `code`, ``. Decide which marks and contexts qualify, and cover the rules
+  with shared Swift and Python cases. Basic rewrap preserves source adjacency.
+
 ### Check mode and pre-commit integration
 
 - [ ] Add `--check` and `--diff` for CI and review workflows.

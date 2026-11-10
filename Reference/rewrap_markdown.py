@@ -60,12 +60,11 @@ BreakStyle = Literal["\\", "  "]
 BLANK_RE = re.compile(r"^\s*$")
 FENCE_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})\s*(.*)$")
 ATX_RE = re.compile(r"^ {0,3}#{1,6}(?:\s+.*|)$")
-HR_RE = re.compile(r"^ {0,3}(?:-(?: *-){2,}|\*(?: *\*){2,}|_(?: *_){2,}) *$")
+HR_RE = re.compile(r"^ {0,3}(?:-(?:[ \t]*-){2,}|\*(?:[ \t]*\*){2,}|_(?:[ \t]*_){2,})[ \t]*$")
 SETEXT_H1_RE = re.compile(r"^ {0,3}=+ *$")
 SETEXT_H2_RE = re.compile(r"^ {0,3}-+ *$")
 BLOCKQUOTE_RE = re.compile(r"^ {0,3}>( ?)(.*)$")
-BULLET_RE = re.compile(r"^( {0,3})([-*+])( +)(.*)$")
-ORDERED_RE = re.compile(r"^( {0,3})(\d{1,9})([.)])( +)(.*)$")
+LIST_MARKER_RE = re.compile(r"^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)(.*)$")
 FOOTNOTE_RE = re.compile(r"^\[\^([^\]]+)\]:( +)(.*)$")
 REFERENCE_DEFINITION_RE = re.compile(r"^ {0,3}\[[^\]]+\]:\s+\S+.*$")
 TABLE_DELIM_RE = re.compile(r"^ {0,3}\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
@@ -117,12 +116,14 @@ def version_string() -> str:
 
 
 def usage_string() -> str:
-    return """Usage: rewrap-markdown [--unwrap] [--commit] [WIDTH]
+    return """Usage: rewrap-markdown [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
 
 Read Markdown from standard input and write the transformed text to standard output.
 
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
+  --repair  Fix spacing around parenthesized code and keep parentheses with adjacent words.
+  --indent  Set the list indentation style (default: preserve).
   --version Print the version."""
 
 
@@ -133,32 +134,118 @@ Read Markdown from standard input and write the transformed text to standard out
 
 def tokenize_inline(text: str) -> list[str]:
     """
-    Split text into wrap-atomic tokens: whitespace-delimited words, except
-    that inline code spans, links/images, autolinks and bare URLs are kept
-    whole even if they contain spaces.
+    Keep atomic spans whole and preserve their adjacency to surrounding text.
+    Only source whitespace outside an atomic span creates a wrap opportunity.
     """
     tokens: list[str] = []
-    pos: int = 0
-    
-    for m in INLINE_ATOMIC_RE.finditer(text):
-        if m.start() < pos:
-            continue
-        if m.start() > pos:
-            tokens.extend(text[pos : m.start()].split())
-        token = m.group(0)
-        pos = m.end()
-        while pos < len(text) and text[pos] in ",.;:!?":
-            token += text[pos]
-            pos += 1
-        tokens.append(token)
-    
-    if pos < len(text):
-        tokens.extend(text[pos:].split())
-    
+    token_end = 0
+
+    def append_token(start: int, end: int):
+        nonlocal token_end
+        token = text[start:end]
+        if tokens and start == token_end:
+            tokens[-1] += token
+        else:
+            tokens.append(token)
+        token_end = end
+
+    def append_words(start: int, end: int):
+        for word in re.finditer(r"\S+", text[start:end]):
+            append_token(start + word.start(), start + word.end())
+
+    cursor = 0
+    for match in INLINE_ATOMIC_RE.finditer(text):
+        append_words(cursor, match.start())
+        append_token(match.start(), match.end())
+        cursor = match.end()
+    append_words(cursor, len(text))
     return tokens
 
 
-def wrap_tokens(tokens: list[str], width: int) -> list[str]:
+# Escapes and all inline atoms are opaque. Code delimiters must have equal
+# run lengths; unmatched runs cannot be mistaken for shorter code spans.
+REPAIR_ATOMIC_RE = re.compile(
+    r"\\[\s\S]|(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|`+"
+    r"|!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\([^)]*\)"
+    r"|\[[^\]]*\](?:\[[^\]]*\])?|<[^ >]+>|https?://\S+"
+)
+
+
+def tokenize_repair_inline(source: str) -> list[str]:
+    def atoms_and_mask(text):
+        atoms = list(REPAIR_ATOMIC_RE.finditer(text))
+        opaque = [False] * len(text)
+        for atom in atoms:
+            opaque[atom.start():atom.end()] = [True] * (atom.end() - atom.start())
+        return atoms, opaque
+
+    atoms, opaque = atoms_and_mask(source)
+    # Only tighten closing parentheses that have an opener in this segment.
+    depth = 0
+    matched_closers = set()
+    for index, char in enumerate(source):
+        if opaque[index]:
+            continue
+        if char == "(":
+            depth += 1
+        elif char == ")" and depth > 0:
+            depth -= 1
+            matched_closers.add(index)
+
+    removals = []
+    for atom in atoms:
+        if atom.group(1) is None:
+            continue
+        left, right = atom.span()
+        while right < len(source) and source[right] in " \t":
+            right += 1
+        if right not in matched_closers:
+            continue
+        if right > atom.end():
+            removals.append((atom.end(), right))
+
+        while left > 0 and source[left - 1] in " \t":
+            left -= 1
+        if (0 < left < atom.start()
+                and source[left - 1] == "(" and not opaque[left - 1]):
+            removals.append((left, atom.start()))
+    text = source
+    for start, end in sorted(removals, reverse=True):
+        text = text[:start] + text[end:]
+    atoms, opaque = atoms_and_mask(text)
+    ranges = []
+
+    def append(start, end):
+        if ranges and ranges[-1][1] == start:
+            ranges[-1] = (ranges[-1][0], end)
+        else:
+            ranges.append((start, end))
+
+    def words(start, end):
+        for word in re.finditer(r"\S+", text[start:end]):
+            append(start + word.start(), start + word.end())
+
+    cursor = 0
+    for atom in atoms:
+        words(cursor, atom.start())
+        append(atom.start(), atom.end())
+        cursor = atom.end()
+    words(cursor, len(text))
+    tokens = []
+    previous_end = None
+    for start, end in ranges:
+        closes = text[start] == ")" and not opaque[start]
+        opens = (previous_end is not None and text[previous_end - 1] == "("
+                 and not opaque[previous_end - 1])
+        if tokens and (opens or closes):
+            tokens[-1] += " " + text[start:end]
+        else:
+            tokens.append(text[start:end])
+        previous_end = end
+    return tokens
+
+
+def wrap_tokens(tokens: list[str], width: int, column: int) -> list[str]:
     """
     Greedy word-wrap a token stream to `width` columns. A single token longer
     than `width` is placed alone on its own (over-length) line rather than
@@ -173,14 +260,15 @@ def wrap_tokens(tokens: list[str], width: int) -> list[str]:
     tok: str
     
     for tok in tokens:
-        add_len = len(tok) if not current else len(tok) + 1
-        if current and current_len + add_len > width:
+        token_start = column + current_len + (1 if current else 0)
+        next_len = end_column(tok, token_start) - column
+        if current and next_len > width:
             lines.append(" ".join(current))
             current = [tok]
-            current_len = len(tok)
+            current_len = end_column(tok, column) - column
         else:
             current.append(tok)
-            current_len += add_len
+            current_len = next_len
     
     if current:
         lines.append(" ".join(current))
@@ -188,7 +276,7 @@ def wrap_tokens(tokens: list[str], width: int) -> list[str]:
     return lines or [""]
 
 
-def wrap_paragraph_text(raw_lines: list[str], width: int) -> list[str]:
+def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: bool) -> list[str]:
     """
     Reflow a paragraph's raw source lines to `width` columns.
 
@@ -220,8 +308,8 @@ def wrap_paragraph_text(raw_lines: list[str], width: int) -> list[str]:
 
     out_lines: list[str] = []
     for i, (text, break_style) in enumerate(segments):
-        tokens = tokenize_inline(text)
-        wrapped = wrap_tokens(tokens, width) if tokens else [""]
+        tokens = tokenize_repair_inline(text) if repair else tokenize_inline(text)
+        wrapped = wrap_tokens(tokens, width, column) if tokens else [""]
         if break_style is not None and wrapped:
             wrapped[-1] = wrapped[-1] + break_style
         out_lines.extend(wrapped)
@@ -234,8 +322,66 @@ def wrap_paragraph_text(raw_lines: list[str], width: int) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def leading_spaces(line: str) -> int:
-    return len(line) - len(line.lstrip(" "))
+def end_column(text: str, column: int) -> int:
+    for character in text:
+        column += 4 - column % 4 if character == "\t" else 1
+    return column
+
+
+def leading_indent(line: str, column: int) -> int:
+    prefix = line[:len(line) - len(line.lstrip(" \t"))]
+    return end_column(prefix, column) - column
+
+
+def block_syntax(line: str, column: int) -> str:
+    # Expand leading tabs for structural tests, keeping the source for rendering.
+    text = line.lstrip(" \t")
+    prefix = line[:len(line) - len(text)]
+    if "\t" not in prefix:
+        return line
+    return " " * (end_column(prefix, column) - column) + text
+
+
+def drop_indent(line: str, column: int, width: int) -> tuple[str, str]:
+    target = column + width
+    index = 0
+    while column < target and index < len(line) and line[index] in " \t":
+        column = end_column(line[index], column)
+        index += 1
+    return line[:index], " " * max(0, column - target) + line[index:]
+
+
+def indentation(width: int, column: int, tabs: bool) -> str:
+    target = column + width
+    prefix = ""
+    while tabs and column + 4 - column % 4 <= target:
+        prefix += "\t"
+        column += 4 - column % 4
+    return prefix + " " * (target - column)
+
+
+def rebase_code_indent(line: str, width: int, input_col: int) -> str:
+    # Recreate only the portion the Markdown parser strips from a code line.
+    removed = min(width, leading_indent(line, input_col))
+    _, text = drop_indent(line, input_col, removed)
+    return " " * removed + text
+
+
+def render_list_marker(
+    leading: str, marker: str, padding: str, tab_padding: bool,
+    style: str, input_col: int, output_col: int
+) -> str:
+    width = end_column(leading, input_col) - input_col
+    if style != "preserve" or end_column(leading, output_col) != output_col + width:
+        leading = indentation(width, output_col, style == "tabs")
+    input_end = input_col + width + len(marker)
+    output_end = output_col + width + len(marker)
+    padding_width = end_column(padding, input_end) - input_end
+    if style == "tabs" and tab_padding:
+        padding = "\t"
+    elif style != "preserve" or end_column(padding, output_end) != output_end + padding_width:
+        padding = " " * padding_width
+    return leading + marker + padding
 
 
 def is_blockquote(line: str) -> bool:
@@ -258,22 +404,24 @@ def nested_width(width: int, prefix_width: int) -> int:
     return 0 if width == 0 else max(1, width - prefix_width)
 
 
-def process_block(lines: list[str], width: int) -> list[str]:
-    rendered, _ = process_blocks(lines, width, set())
+def process_block(lines: list[str], width: int, style: str, repair: bool) -> list[str]:
+    rendered, _ = process_blocks(lines, width, set(), style, 0, 0, repair)
     return rendered
 
 
 def process_blocks(
-    lines: list[str], width: int, lazy_lines: set[int]
+    lines: list[str], width: int, lazy_lines: set[int], style: str, input_col: int, output_col: int, repair: bool
 ) -> tuple[list[str], int]:
     # A line missing list indentation can extend a paragraph, but cannot
     # start a block or extend a protected block such as a code fence.
     out: list[str] = []
     i: int = 0
     n: int = len(lines)
+    tab_stops_shift = input_col % 4 != output_col % 4
 
     while i < n and i not in lazy_lines:
         line: str = lines[i]
+        syntax = block_syntax(line, input_col)
 
         # Blank line: pass through as-is.
         if BLANK_RE.match(line):
@@ -282,18 +430,24 @@ def process_blocks(
             continue
 
         # Fenced code block: copy verbatim, including the fences.
-        fm = FENCE_RE.match(line)
+        fm = FENCE_RE.match(syntax)
         if fm:
             fence_char = fm.group(2)[0]
             fence_len = len(fm.group(2))
-            block = [line]
+            block = [syntax if tab_stops_shift else line]
             i += 1
             while i < n and i not in lazy_lines:
-                block.append(lines[i])
+                code_line = lines[i]
+                code_syntax = block_syntax(code_line, input_col)
                 close_m = re.match(
                     r"^ {0,3}(" + re.escape(fence_char) + r"{" + str(fence_len) + r",})\s*$",
-                    lines[i],
+                    code_syntax,
                 )
+                if tab_stops_shift:
+                    code_line = code_syntax if close_m else rebase_code_indent(
+                        code_line, len(fm.group(1)), input_col
+                    )
+                block.append(code_line)
                 i += 1
                 if close_m:
                     break
@@ -301,14 +455,14 @@ def process_blocks(
             continue
 
         # Thematic break: verbatim.
-        if HR_RE.match(line):
-            out.append(line.rstrip())
+        if HR_RE.match(syntax):
+            out.append((syntax if tab_stops_shift else line).rstrip())
             i += 1
             continue
 
         # ATX heading: verbatim, single line.
-        if ATX_RE.match(line):
-            out.append(line.rstrip())
+        if ATX_RE.match(syntax):
+            out.append((syntax if tab_stops_shift else line).rstrip())
             i += 1
             continue
 
@@ -319,15 +473,16 @@ def process_blocks(
             continue
 
         # Link reference definition: verbatim, single line.
-        if REFERENCE_DEFINITION_RE.match(line):
-            out.append(line.rstrip())
+        if REFERENCE_DEFINITION_RE.match(syntax):
+            out.append((syntax if tab_stops_shift else line).rstrip())
             i += 1
             continue
 
         # Indented code block: copy verbatim.
-        if leading_spaces(line) >= 4:
-            while i < n and i not in lazy_lines and (BLANK_RE.match(lines[i]) or leading_spaces(lines[i]) >= 4):
-                out.append(lines[i].rstrip())
+        if leading_indent(line, input_col) >= 4:
+            while i < n and i not in lazy_lines and (BLANK_RE.match(lines[i]) or leading_indent(lines[i], input_col) >= 4):
+                code_line = rebase_code_indent(lines[i], 4, input_col) if tab_stops_shift else lines[i]
+                out.append(code_line.rstrip())
                 i += 1
             continue
 
@@ -336,12 +491,12 @@ def process_blocks(
         # fresh paragraph, matching typical hand-written usage.
         if (
             not BLANK_RE.match(line)
-            and not is_blockquote(line)
-            and not BULLET_RE.match(line)
-            and not ORDERED_RE.match(line)
+            and not is_blockquote(syntax)
+            and not LIST_MARKER_RE.match(line)
             and i + 1 < n
             and i + 1 not in lazy_lines
-            and (SETEXT_H1_RE.match(lines[i + 1]) or SETEXT_H2_RE.match(lines[i + 1]))
+            and (SETEXT_H1_RE.match(block_syntax(lines[i + 1], input_col))
+                 or SETEXT_H2_RE.match(block_syntax(lines[i + 1], input_col)))
         ):
             out.append(line.rstrip())
             out.append(lines[i + 1].rstrip())
@@ -349,14 +504,14 @@ def process_blocks(
             continue
 
         # HTML block: copy verbatim until a blank line.
-        if is_html_block_start(line):
+        if is_html_block_start(syntax):
             while i < n and i not in lazy_lines and not BLANK_RE.match(lines[i]):
                 out.append(lines[i].rstrip())
                 i += 1
             continue
 
         # HTML comment: copy verbatim until the closing marker.
-        if HTML_COMMENT_START_RE.match(line):
+        if HTML_COMMENT_START_RE.match(syntax):
             while i < n and i not in lazy_lines:
                 out.append(lines[i].rstrip())
                 is_end = HTML_COMMENT_END_RE.search(lines[i]) is not None
@@ -383,17 +538,20 @@ def process_blocks(
         # Blockquote: gather contiguous quoted lines (including bare ">"
         # blank-quote separators), strip one level of prefix, recurse, then
         # reapply the prefix.
-        bqm = BLOCKQUOTE_RE.match(line)
+        bqm = BLOCKQUOTE_RE.match(syntax)
         if bqm:
             inner = []
             while i < n and i not in lazy_lines:
-                m = BLOCKQUOTE_RE.match(lines[i])
+                m = BLOCKQUOTE_RE.match(block_syntax(lines[i], input_col))
                 if not m:
                     break
                 inner.append(m.group(2))
                 i += 1
             prefix_width = 2  # "> "
-            rendered = process_block(inner, nested_width(width, prefix_width))
+            rendered, _ = process_blocks(
+                inner, nested_width(width, prefix_width), set(), style,
+                input_col + bqm.end(1), output_col + prefix_width, repair
+            )
             for rline in rendered:
                 out.append("> " + rline if rline else ">")
             continue
@@ -404,30 +562,31 @@ def process_blocks(
             marker = "[^{}]: ".format(fnm.group(1))
             first_text = line[fnm.end(2):]
             rendered, i = process_list_item(
-                lines, i, marker, first_text, width, lazy_lines, allows_lazy_lines=False
+                lines, i, marker, first_text, width, lazy_lines, style, input_col, output_col,
+                repair=repair, allows_lazy_lines=False
             )
             out.extend(rendered)
             continue
 
-        # Bulleted list item.
-        blm = BULLET_RE.match(line)
-        if blm:
-            indent, bullet, _spacing, first_text = blm.groups()
-            marker = indent + bullet + " "
-            rendered, i = process_list_item(
-                lines, i, marker, first_text, width, lazy_lines, allows_lazy_lines=True
+        # Bulleted or ordered list item.
+        match = LIST_MARKER_RE.match(line)
+        if match:
+            leading, marker, padding, first_text = match.groups()
+            marker_end = end_column(leading + marker, input_col)
+            tab_padding = end_column(padding, marker_end) - marker_end <= 4
+            if not tab_padding:
+                _, excess = drop_indent(padding, marker_end, 1)
+                first_text = excess + first_text
+                padding = " "
+            output_marker = render_list_marker(
+                leading, marker, padding, tab_padding, style, input_col, output_col
             )
-            out.extend(rendered)
-            continue
-
-        # Ordered list item.
-        olm = ORDERED_RE.match(line)
-        if olm:
-            indent, num, punct, _spacing, first_text = olm.groups()
-            marker = indent + num + punct + " "
             rendered, i = process_list_item(
-                lines, i, marker, first_text, width, lazy_lines, allows_lazy_lines=True
+                lines, i, leading + marker + padding, first_text, width, lazy_lines,
+                style, input_col, output_col, repair=repair, allows_lazy_lines=True, output_marker=output_marker
             )
+            if not tab_padding and style == "preserve" and not tab_stops_shift:
+                rendered[0] = line.rstrip()
             out.extend(rendered)
             continue
 
@@ -435,28 +594,28 @@ def process_blocks(
         # don't start a new block construct.
         para: list[str] = [line]
         i += 1
-        while i < n and not BLANK_RE.match(lines[i]) and not starts_new_block(lines[i]):
+        while i < n and not BLANK_RE.match(lines[i]) and not starts_new_block(lines[i], input_col):
             para.append(lines[i])
             i += 1
-        out.extend(wrap_paragraph_text(para, width))
+        out.extend(wrap_paragraph_text(para, width, output_col, repair))
 
     return out, i
 
 
-def starts_new_block(line: str) -> bool:
+def starts_new_block(line: str, column: int) -> bool:
+    syntax = block_syntax(line, column)
     return (
-        is_fence_start(line)
-        or ATX_RE.match(line)
-        or GFM_ALERT_MARKER_RE.match(line)
-        or HR_RE.match(line)
-        or is_blockquote(line)
-        or BULLET_RE.match(line)
-        or ORDERED_RE.match(line)
-        or FOOTNOTE_RE.match(line)
-        or REFERENCE_DEFINITION_RE.match(line)
-        or is_html_block_start(line)
-        or HTML_COMMENT_START_RE.match(line)
-        or leading_spaces(line) >= 4
+        is_fence_start(syntax)
+        or ATX_RE.match(syntax)
+        or GFM_ALERT_MARKER_RE.match(syntax)
+        or HR_RE.match(syntax)
+        or is_blockquote(syntax)
+        or LIST_MARKER_RE.match(line)
+        or FOOTNOTE_RE.match(syntax)
+        or REFERENCE_DEFINITION_RE.match(syntax)
+        or is_html_block_start(syntax)
+        or HTML_COMMENT_START_RE.match(syntax)
+        or leading_indent(line, column) >= 4
     )
 
 
@@ -467,10 +626,18 @@ def process_list_item(
     first_text: str,
     width: int,
     parent_lazy_lines: set[int],
+    style: str,
+    input_col: int,
+    output_col: int,
     *,
+    repair: bool,
     allows_lazy_lines: bool,
+    output_marker: Optional[str] = None,
 ) -> tuple[list[str], int]:
-    content_col = len(marker)
+    content_col = end_column(marker, input_col) - input_col
+    first_prefix = output_marker if output_marker is not None else marker
+    output_width = end_column(first_prefix, output_col) - output_col
+    original_continuation = None
     n = len(lines)
     item = [first_text]
     lazy_lines: set[int] = set()
@@ -483,7 +650,7 @@ def process_list_item(
             k = j
             while k < n and BLANK_RE.match(lines[k]):
                 k += 1
-            if k < n and k not in parent_lazy_lines and leading_spaces(lines[k]) >= content_col:
+            if k < n and k not in parent_lazy_lines and leading_indent(lines[k], input_col) >= content_col:
                 # keep the blank(s), then continue with next indented line
                 while j < k:
                     item.append("")
@@ -492,16 +659,19 @@ def process_list_item(
             else:
                 break
 
-        indent = leading_spaces(lines[j])
+        indent = leading_indent(lines[j], input_col)
         if j not in parent_lazy_lines and indent >= content_col:
-            item.append(lines[j][content_col:])
+            prefix, text = drop_indent(lines[j], input_col, content_col)
+            if original_continuation is None and end_column(prefix, input_col) == input_col + content_col:
+                original_continuation = (len(item), prefix)
+            item.append(text)
             j += 1
             continue
 
         if not allows_lazy_lines:
             break
-        text = lines[j][indent:]
-        if starts_new_block(text) or (
+        text = lines[j].lstrip(" \t")
+        if starts_new_block(text, input_col) or (
             is_table_row(lines[j])
             and j + 1 < n
             and j + 1 not in parent_lazy_lines
@@ -512,22 +682,31 @@ def process_list_item(
         item.append(text)
         j += 1
 
-    rendered, consumed = process_blocks(item, nested_width(width, content_col), lazy_lines)
+    rendered, consumed = process_blocks(
+        item, nested_width(width, output_width), lazy_lines, style,
+        input_col + content_col, output_col + output_width, repair
+    )
+    use_tabs = allows_lazy_lines and (style == "tabs" or "\t" in first_prefix)
+    rest_prefix = indentation(output_width, output_col, use_tabs)
+    if style == "preserve" and original_continuation is not None:
+        index, prefix = original_continuation
+        if index < consumed and end_column(prefix, output_col) == output_col + output_width:
+            rest_prefix = prefix
     # Each gathered line corresponds to one source line, including the marker line.
-    return render_hanging(rendered, marker, " " * content_col), i + consumed
+    return render_hanging(rendered, first_prefix, rest_prefix, allows_lazy_lines), i + consumed
 
 
 def render_hanging(
-    content_lines: list[str], first_prefix: str, rest_prefix: str
+    content_lines: list[str], first_prefix: str, rest_prefix: str, keep_empty_marker: bool
 ) -> list[str]:
     out: list[str] = []
     for idx, line in enumerate(content_lines):
         prefix = first_prefix if idx == 0 else rest_prefix
-        out.append("" if line == "" else prefix + line)
+        out.append(prefix + line if line or (idx == 0 and keep_empty_marker) else "")
     return out
 
 
-def rewrap(text: str, width: int) -> str:
+def rewrap(text: str, width: int, indent: str = "preserve", repair: bool = False) -> str:
     # Normalize line endings, preserve trailing newline presence.
     had_trailing_newline = text.endswith("\n")
     lines: list[str] = text.split("\n")
@@ -535,7 +714,7 @@ def rewrap(text: str, width: int) -> str:
     if lines and lines[-1] == "" and had_trailing_newline:
         lines = lines[:-1]
     
-    out = process_block(lines, normalize_width(width))
+    out = process_block(lines, normalize_width(width), indent, repair)
     result: str = "\n".join(out)
     if had_trailing_newline:
         result += "\n"
@@ -572,7 +751,7 @@ def commit_trailer_block_start(lines: list[str]) -> Optional[int]:
     return start if found_trailer else None
 
 
-def process_commit_message_body(lines: list[str], width: int) -> list[str]:
+def process_commit_message_body(lines: list[str], width: int, indent: str, repair: bool) -> list[str]:
     trailer_start = commit_trailer_block_start(lines)
     body_end = len(lines) if trailer_start is None else trailer_start
     output: list[str] = []
@@ -580,7 +759,7 @@ def process_commit_message_body(lines: list[str], width: int) -> list[str]:
 
     def flush_pending() -> None:
         if pending:
-            output.extend(process_block(pending, width))
+            output.extend(process_block(pending, width, indent, repair))
             pending.clear()
 
     for line in lines[:body_end]:
@@ -596,7 +775,9 @@ def process_commit_message_body(lines: list[str], width: int) -> list[str]:
     return output
 
 
-def rewrap_commit_message(text: str, width: int = DEFAULT_COMMIT_MESSAGE_WIDTH) -> str:
+def rewrap_commit_message(
+    text: str, width: int = DEFAULT_COMMIT_MESSAGE_WIDTH, indent: str = "preserve", repair: bool = False
+) -> str:
     had_trailing_newline = text.endswith("\n")
     lines = text.split("\n")
     if lines and lines[-1] == "" and had_trailing_newline:
@@ -605,7 +786,7 @@ def rewrap_commit_message(text: str, width: int = DEFAULT_COMMIT_MESSAGE_WIDTH) 
         return text
 
     output = [lines[0]]
-    output.extend(process_commit_message_body(lines[1:], normalize_width(width)))
+    output.extend(process_commit_message_body(lines[1:], normalize_width(width), indent, repair))
     result = "\n".join(output)
     return result + "\n" if had_trailing_newline else result
 
@@ -619,6 +800,13 @@ def main():
         return
 
     arguments = sys.argv[1:]
+    indent = "preserve"
+    for argument in arguments:
+        if argument == "--indent" or argument.startswith("--indent="):
+            indent = argument.removeprefix("--indent=")
+            if indent not in ("preserve", "tabs", "spaces"):
+                print("Expected --indent=preserve, --indent=tabs, or --indent=spaces.", file=sys.stderr)
+                raise SystemExit(2)
     unwrap = "--unwrap" in arguments
     commit_message = "--commit" in arguments
     width = get_width(
@@ -626,9 +814,9 @@ def main():
     )
     data = sys.stdin.read()
     if commit_message:
-        sys.stdout.write(rewrap_commit_message(data, 0 if unwrap else width))
+        sys.stdout.write(rewrap_commit_message(data, 0 if unwrap else width, indent=indent, repair="--repair" in arguments))
     else:
-        sys.stdout.write(rewrap(data, 0 if unwrap else width))
+        sys.stdout.write(rewrap(data, 0 if unwrap else width, indent=indent, repair="--repair" in arguments))
 
 
 if __name__ == "__main__":

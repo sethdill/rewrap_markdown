@@ -38,6 +38,8 @@ release_note = (
 table = '| A | B |\n| --- | --- |\n| 1 | 2 |\n'
 for mode in ('--unwrap', '0'):
     check([mode], release_note, ' '.join(release_note.splitlines()) + '\n')
+    check(['--repair', mode], release_note,
+          ' '.join(release_note.splitlines()).replace('` )', '`)') + '\n')
     check([mode], '1. First line\n continuation\n   more text.\n2. Next item.\n',
           '1. First line continuation more text.\n2. Next item.\n')
     check([mode], '- ```\n  keep   spaces\noutside the fence\nand the list.\n',
@@ -49,6 +51,51 @@ for mode in ('--unwrap', '0'):
     check([mode], '- First item.\n' + table, '- First item.\n' + table)
 check(['17'], '- First line\ncontinues here.\n',
       '- First line\n  continues here.\n')
+
+tabbed_list = '*\tParent words go here.\n\t*\tChild words go here.\n'
+wrapped_tabs = '*\tParent words go\n\there.\n\t*\tChild words\n\t\tgo here.\n'
+for indent_args in ([], ['--indent=preserve']):
+    check(indent_args + ['20'], tabbed_list, wrapped_tabs)
+    check(indent_args + ['--unwrap'], wrapped_tabs, tabbed_list)
+check(['--indent=spaces', '20'], tabbed_list, wrapped_tabs.expandtabs(4))
+check(['--indent=tabs', '20'], '* Parent words go here.\n  * Child words go here.\n', wrapped_tabs)
+check(['--indent=tabs', '--commit', '20'],
+      'Subject\n\n* Parent words go here.\n  * Child words go here.\n',
+      'Subject\n\n' + wrapped_tabs)
+check(['20'], '*   Parent words go here.\n\t *\tChild words go here.\n',
+      '*   Parent words go\n\there.\n\t *\tChild words\n\t\tgo here.\n')
+check(['--indent=tabs', '--unwrap'], '*     code  stays\n', '*     code  stays\n')
+check(['--unwrap'], '*\t\tcode  stays\n', '*\t\tcode  stays\n')
+check(['--unwrap'], '*\t\n*\tSecond item.\n', '*\t\n*\tSecond item.\n')
+check(['--indent=tabs', '--unwrap'], '* Text.\n\n  \t  code\tstays\n',
+      '*\tText.\n\n\t    code\tstays\n')
+check(['--indent=spaces', '--unwrap'], '*\tText.\n\t```\n\tkeep\tspaces\n\t```\n',
+      '*   Text.\n    ```\n    keep\tspaces\n    ```\n')
+# Repair is opt-in and composes with the existing CLI modes.
+repair_source = 'Before ( `code` ) after.\n'
+check(['0'], repair_source, repair_source)
+check(['--repair', '10'], repair_source, 'Before\n(`code`)\nafter.\n')
+check(['--repair', '18'], 'Before ( several\nordinary words\n) after.\n',
+      'Before ( several\nordinary words )\nafter.\n')
+for mode in ('--unwrap', '0'):
+    check(['--repair', mode], repair_source, 'Before (`code`) after.\n')
+    for style in ('preserve', 'tabs', 'spaces'):
+        body = '*\t( `code` )\n'
+        expected_body = '*   (`code`)\n' if style == 'spaces' else '*\t(`code`)\n'
+        prefix = 'Subject ( `subject` )\n\n'
+        suffix = '\n# ( `comment` )\n\nSigned-off-by: ( `trailer` )\n'
+        check(['--repair', '--commit', '--indent=' + style, mode],
+              prefix + body + suffix, prefix + expected_body + suffix)
+protected_repair = '```\n( `code` )\n```\n\n    ( `code` )\n'
+check(['--repair', '10'], protected_repair, protected_repair)
+check(['--repair', '0'], '( `` a ` b  `` ) `code` , [ `code` ]\n',
+      '(`` a ` b  ``) `code` , [ `code` ]\n')
+
+invalid_indent = subprocess.run(COMMAND + ['--indent=invalid'], input='', text=True,
+                                capture_output=True, env=ENV)
+assert invalid_indent.returncode == 2 and not invalid_indent.stdout
+assert '--indent=preserve' in invalid_indent.stderr
+
 commit = ('Subject stays exactly as written\n\nThese words should wrap across lines.\n\n'
           '# Keep this comment exactly as written.\n\nSigned-off-by: Tester <test@example.com>\n')
 wrapped = commit.replace('These words should wrap across lines.',

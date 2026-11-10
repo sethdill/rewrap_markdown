@@ -6,12 +6,14 @@ import RewrapMarkdownCore
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 let usage = """
-Usage: rewrap-markdown [--unwrap] [--commit] [WIDTH]
+Usage: rewrap-markdown [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
 
 Read Markdown from standard input and write the transformed text to standard output.
 
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
+  --repair  Fix spacing around parenthesized code and keep parentheses with adjacent words.
+  --indent  Set the list indentation style (default: preserve).
   --version Print the version.
 """
 
@@ -27,6 +29,15 @@ if arguments.contains("--help") || arguments.contains("-h") {
 
 let unwrap = arguments.contains("--unwrap")
 let commitMessage = arguments.contains("--commit")
+var indent = RewrapMarkdown.IndentStyle.preserve
+for argument in arguments where argument == "--indent" || argument.hasPrefix("--indent=") {
+    guard argument.hasPrefix("--indent="),
+          let style = RewrapMarkdown.IndentStyle(rawValue: String(argument.dropFirst("--indent=".count))) else {
+        FileHandle.standardError.write(Data("Expected --indent=preserve, --indent=tabs, or --indent=spaces.\n".utf8))
+        exit(2)
+    }
+    indent = style
+}
 let widthArguments = arguments.compactMap { Int($0).map(String.init) }
 let width = RewrapMarkdown.width(
     arguments: widthArguments,
@@ -40,8 +51,8 @@ let input = FileHandle.standardInput.readDataToEndOfFile()
 let text = String(data: input, encoding: .utf8) ?? ""
 let output: String
 if commitMessage {
-    output = RewrapMarkdown.rewrapCommitMessage(text, width: unwrap ? 0 : width)
+    output = RewrapMarkdown.rewrapCommitMessage(text, width: unwrap ? 0 : width, indent: indent, repair: arguments.contains("--repair"))
 } else {
-    output = RewrapMarkdown.rewrap(text, width: unwrap ? 0 : width)
+    output = RewrapMarkdown.rewrap(text, width: unwrap ? 0 : width, indent: indent, repair: arguments.contains("--repair"))
 }
 FileHandle.standardOutput.write(Data(output.utf8))

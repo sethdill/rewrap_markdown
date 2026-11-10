@@ -265,6 +265,37 @@ rewrap-markdown --unwrap < draft.md > draft-unwrapped.md
 Width `0` is equivalent to `--unwrap`. Markdown structure, protected blocks,
 and intentional hard line breaks are preserved.
 
+### Repair Parentheses (Opt-in)
+
+Use `rewrap-markdown --repair 70` to remove spacing between an inline code span
+and a matched closing parenthesis. For example, ``(such as `code` )`` becomes
+``(such as `code`)``. When the span is the entire parenthetical, repair also
+removes spacing after the opener, so ``( `code` )`` becomes ``(`code`)``.
+These repairs apply to spaces, tabs, and spacing joined from soft line breaks.
+`( ordinary words )` and ``( `code` plus prose )`` retain their spacing.
+
+Repair also keeps opening parentheses with the following word and closing
+parentheses with the preceding word. Longer parentheticals can wrap internally.
+An inseparable group may exceed the requested width. Code contents, escapes,
+links, URLs, and protected blocks are opaque to repair. Intentional hard breaks
+remain boundaries; repair does not join across them.
+
+`--repair` works with `--unwrap` and width `0` (repair before joining), all
+`--indent=preserve|tabs|spaces` styles, and `--commit` (body only; subject,
+comments, and trailers stay unchanged). Without `--repair`, existing wrapping
+and whitespace behavior is unchanged. Spaced punctuation after inline spans,
+bracket spacing, and additional list normalization are deferred.
+
+### List Indentation
+
+Rewrapping preserves the indentation style of each list item by default.
+Tabbed lists and sublists can coexist with space-indented lists. Tabs advance
+to the next four-column stop for Markdown parsing and wrap measurement.
+
+Use `--indent=tabs` or `--indent=spaces` to convert list indentation
+explicitly. `--indent=preserve` selects the default behavior. These options
+also work with `--unwrap` and `--commit`.
+
 ### Commit Messages
 
 Rewrap a commit message while leaving its subject line, `#` comment lines, and
