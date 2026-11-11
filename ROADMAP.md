@@ -1,7 +1,7 @@
 # Roadmap
 
 Version [0.3](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.3)
-is published. Later releases list planned work.
+was published on November 5, 2026. Later releases list planned work.
 
 ## 0.3
 
@@ -38,6 +38,7 @@ is published. Later releases list planned work.
 - [x] Pin the final v0.3 release commit and publish the formula in the
   [public tap](https://github.com/sethdill/homebrew-tap).
 - [x] Verify `brew install sethdill/tap/rewrap-markdown` on macOS and Linux.
+  [CI passed on both architectures](https://github.com/sethdill/homebrew-tap/actions/runs/42054876568).
 
 See the [completed publishing checklist](RELEASING.md#v03-publishing-checklist)
 and the [tap maintenance notes](Packaging/homebrew/README.md).
