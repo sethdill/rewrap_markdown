@@ -268,6 +268,29 @@ formatting would change them, and `2` indicates an argument or input error
 reported on stderr. The check uses the requested width and supports
 `--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`.
 
+### Rewrap Specific Lines
+
+Use repeatable `--lines START:END` arguments to select lines from standard input.
+Line numbers are 1-based and inclusive. Every range uses the original input's
+line numbers, even if rewrapping an earlier block changes its length.
+
+```sh
+rewrap-markdown --lines 8:12 --lines 24:24 80 < draft.md > draft-wrapped.md
+rewrap-markdown --check --lines 8:12 80 < draft.md
+```
+
+A range that touches prose selects the whole paragraph or the prose belonging to
+the same list item, with its enclosing list and quote context. Nested list items
+can be selected independently. A range can reach across fenced or indented code
+and other protected blocks to select prose on either side. Protected blocks and
+all bytes outside the selected prose are preserved, including line endings,
+trailing spaces, and the presence or absence of a final newline.
+
+Both CLIs support width, `--unwrap`, `--repair`, and `--indent` with ranges.
+`--check` reports whether the selected formatting would change the input.
+Malformed, reversed, or out-of-bounds ranges exit with status `2` and a
+diagnostic on stderr. `--lines` is incompatible with `--commit`.
+
 ### Unwrap Markdown
 
 Join each paragraph and list item onto one line before pasting Markdown into a

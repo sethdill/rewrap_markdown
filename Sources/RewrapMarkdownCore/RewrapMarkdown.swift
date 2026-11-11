@@ -38,6 +38,77 @@ public enum RewrapMarkdown {
         rewrapDocument(text, width: normalizedWidth(width), indent: indent, repair: repair)
     }
 
+    public struct LineRange {
+        public let start: Int
+        public let end: Int
+
+        public init?(_ argument: String) {
+            let parts = argument.split(separator: ":", omittingEmptySubsequences: false)
+            guard parts.count == 2,
+                  parts.allSatisfy({ $0.utf8.allSatisfy { (48...57).contains($0) } }),
+                  let start = Int(parts[0]), let end = Int(parts[1]),
+                  start > 0, end >= start else { return nil }
+            self.start = start
+            self.end = end
+        }
+    }
+
+    public struct LineRangeError: LocalizedError {
+        public let range: LineRange
+        public let lineCount: Int
+
+        public var errorDescription: String? {
+            "--lines \(range.start):\(range.end) is out of bounds for input with \(lineCount) lines."
+        }
+    }
+
+    public static func rewrap(
+        _ text: String, lines ranges: [LineRange], width: Int,
+        indent: IndentStyle = .preserve, repair: Bool = false
+    ) throws -> String {
+        let source = sourceLines(text)
+        for range in ranges where range.end > source.count {
+            throw LineRangeError(range: range, lineCount: source.count)
+        }
+
+        var edits: [ProseEdit] = []
+        let context = IndentContext(style: indent, repair: repair)
+        _ = processBlock(source.map(\.text), width: normalizedWidth(width),
+                         context: context, lazyLines: [], collect: { edits.append($0) })
+
+        let sortedRanges = ranges.sorted { $0.start < $1.start }
+        var selected: Set<Int> = []
+        var rangeIndex = 0
+        for edit in edits {
+            while rangeIndex < sortedRanges.count, sortedRanges[rangeIndex].end <= edit.span.lowerBound {
+                rangeIndex += 1
+            }
+            if rangeIndex < sortedRanges.count, sortedRanges[rangeIndex].start <= edit.span.upperBound {
+                selected.insert(edit.group ?? edit.span.lowerBound)
+            }
+        }
+
+        var output = ""
+        var cursor = 0
+        for edit in edits where selected.contains(edit.group ?? edit.span.lowerBound) {
+            for line in source[cursor..<edit.span.lowerBound] {
+                output += line.text + line.ending
+            }
+            let rendered = edit.render(normalizedWidth(width), 0)
+            let last = edit.span.upperBound - 1
+            for (index, line) in rendered.enumerated() {
+                let ending = index == rendered.count - 1 ? source[last].ending
+                    : source[min(edit.span.lowerBound + index, max(edit.span.lowerBound, last - 1))].ending
+                output += line + (index < rendered.count - 1 && ending.isEmpty ? "\n" : ending)
+            }
+            cursor = edit.span.upperBound
+        }
+        for line in source[cursor...] {
+            output += line.text + line.ending
+        }
+        return output
+    }
+
     public static func rewrapCommitMessage(
         _ text: String,
         width: Int = defaultCommitMessageWidth
@@ -110,6 +181,37 @@ private let gfmAlertMarker = RegexPattern(#"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUT
 private let hardBreak = RegexPattern(#"(\\|  +)$"#)
 private let commitComment = RegexPattern(#"^[ \t]*#"#)
 private let commitTrailer = RegexPattern(#"^[A-Za-z0-9][A-Za-z0-9-]*[ \t]*[:=][ \t]+.+$"#)
+private func sourceLines(_ text: String) -> [(text: String, ending: String)] {
+    var lines: [(String, String)] = []
+    var start = text.startIndex
+    for index in text.indices {
+        let character = text[index]
+        if character == "\n" || character == "\r" || character == "\r\n" {
+            lines.append((String(text[start..<index]), String(character)))
+            start = text.index(after: index)
+        }
+    }
+    if start < text.endIndex {
+        lines.append((String(text[start...]), ""))
+    }
+    return lines
+}
+
+// Spans are local to the current container. The renderer receives the width
+// and output column after its enclosing prefixes have been accounted for.
+private struct ProseEdit {
+    var span: Range<Int>
+    var group: Int?
+    var direct = true
+    var render: (Int, Int) -> [String]
+
+    func nested(at offset: Int, render: @escaping (Int, Int) -> [String]) -> Self {
+        Self(span: (span.lowerBound + offset)..<(span.upperBound + offset),
+             group: group.map { $0 + offset },
+             direct: false, render: render)
+    }
+}
+
 private struct IndentContext {
     let style: RewrapMarkdown.IndentStyle
     var input = 0
@@ -130,7 +232,8 @@ private func processBlock(_ lines: [String], width: Int, indent: RewrapMarkdown.
 // A line missing list indentation can extend a paragraph, but cannot start
 // a block or extend a protected block such as a code fence.
 private func processBlock(
-    _ lines: [String], width: Int, context: IndentContext, lazyLines: Set<Int>
+    _ lines: [String], width: Int, context: IndentContext, lazyLines: Set<Int>,
+    collect: ((ProseEdit) -> Void)? = nil
 ) -> (rendered: [String], consumed: Int) {
     var output: [String] = []
     var i = 0
@@ -246,14 +349,25 @@ private func processBlock(
         }
 
         if let openingQuote = blockquote.firstMatch(in: syntax) {
+            let start = i
             var inner: [String] = []
             while i < lines.count, !lazyLines.contains(i), let match = blockquote.firstMatch(in: blockSyntax(lines[i], column: context.input)) {
                 inner.append(match[2])
                 i += 1
             }
+            let prefixLength = openingQuote.rangeEnd(1)
+            let prefix = substring(syntax, toUTF16Offset: prefixLength)
+            let collectQuoted: ((ProseEdit) -> Void)? = collect.map { collect in
+                { edit in
+                    collect(edit.nested(at: start) { width, column in
+                        edit.render(nestedWidth(width, removing: prefixLength), column + prefixLength)
+                            .map { $0.isEmpty ? trimRight(prefix) : prefix + $0 }
+                    })
+                }
+            }
             let rendered = processBlock(
                 inner, width: nestedWidth(width, removing: 2),
-                context: context.nested(input: openingQuote.rangeEnd(1), output: 2), lazyLines: []
+                context: context.nested(input: openingQuote.rangeEnd(1), output: 2), lazyLines: [], collect: collectQuoted
             ).rendered
             output.append(contentsOf: rendered.map { $0.isEmpty ? ">" : "> " + $0 })
             continue
@@ -264,7 +378,7 @@ private func processBlock(
             let firstText = substring(line, fromUTF16Offset: match.rangeEnd(2))
             let item = processListItem(
                 lines, start: i, marker: marker, firstText: firstText, width: width,
-                context: context, parentLazyLines: lazyLines, allowsLazyLines: false
+                context: context, parentLazyLines: lazyLines, allowsLazyLines: false, collect: collect
             )
             output.append(contentsOf: item.rendered)
             i = item.nextIndex
@@ -280,14 +394,15 @@ private func processBlock(
             let firstText = paddingWidth <= 4
                 ? match[4]
                 : dropIndent(padding, column: markerEnd, width: 1).text + match[4]
-            let outputMarker = renderListMarker(
-                leading: match[1], marker: match[2], padding: inputPadding,
-                tabPadding: paddingWidth <= 4, context: context
-            )
+            let outputMarker: (Int) -> String = { column in
+                renderListMarker(leading: match[1], marker: match[2], padding: inputPadding,
+                                 tabPadding: paddingWidth <= 4,
+                                 context: context.nested(input: 0, output: column - context.output))
+            }
             let item = processListItem(
                 lines, start: i, marker: marker + inputPadding, firstText: firstText, width: width,
                 context: context, parentLazyLines: lazyLines, allowsLazyLines: true,
-                outputMarker: outputMarker
+                outputMarker: outputMarker, collect: collect
             )
             if paddingWidth > 4, context.style == .preserve, !context.tabStopsShift {
                 output.append(trimRight(line))
@@ -299,13 +414,21 @@ private func processBlock(
             continue
         }
 
+        let start = i
         var paragraph = [line]
         i += 1
         while i < lines.count, !blank.matches(lines[i]), !startsNewBlock(lines[i], column: context.input) {
             paragraph.append(lines[i])
             i += 1
         }
-        output.append(contentsOf: wrapParagraphText(paragraph, width: width, column: context.output, repair: context.repair))
+        if let collect {
+            let span = start..<i
+            collect(ProseEdit(span: span) { width, column in
+                wrapParagraphText(paragraph, width: width, column: column, repair: context.repair)
+            })
+        } else {
+            output.append(contentsOf: wrapParagraphText(paragraph, width: width, column: context.output, repair: context.repair))
+        }
     }
 
     return (output, i)
@@ -561,10 +684,11 @@ private func processListItem(
     context: IndentContext,
     parentLazyLines: Set<Int>,
     allowsLazyLines: Bool,
-    outputMarker: String? = nil
+    outputMarker: ((Int) -> String)? = nil,
+    collect: ((ProseEdit) -> Void)? = nil
 ) -> (rendered: [String], nextIndex: Int) {
     let contentColumn = endColumn(marker, from: context.input) - context.input
-    let firstPrefix = outputMarker ?? marker
+    let firstPrefix = outputMarker?(context.output) ?? marker
     let outputWidth = endColumn(firstPrefix, from: context.output) - context.output
     var originalContinuation: (index: Int, prefix: String)?
     var item = [firstText]
@@ -611,17 +735,48 @@ private func processListItem(
         j += 1
     }
 
+    var edits: [ProseEdit] = []
+    let collectItem: ((ProseEdit) -> Void)? = collect.map { _ in { edits.append($0) } }
     let parsed = processBlock(
         item, width: nestedWidth(width, removing: outputWidth),
-        context: context.nested(input: contentColumn, output: outputWidth), lazyLines: lazyLines
+        context: context.nested(input: contentColumn, output: outputWidth), lazyLines: lazyLines, collect: collectItem
     )
-    let useTabs = allowsLazyLines && (context.style == .tabs || firstPrefix.contains("\t"))
-    var restPrefix = indentation(width: outputWidth, from: context.output, tabs: useTabs)
-    if context.style == .preserve, let original = originalContinuation,
-       original.index < parsed.consumed,
-       endColumn(original.prefix, from: context.output) == context.output + outputWidth {
-        restPrefix = original.prefix
+    let consumed = parsed.consumed
+    func continuationPrefix(_ prefix: String, width: Int, column: Int) -> String {
+        if context.style == .preserve, let original = originalContinuation,
+           original.index < consumed,
+           endColumn(original.prefix, from: column) == column + width {
+            return original.prefix
+        }
+        let useTabs = allowsLazyLines && (context.style == .tabs || prefix.contains("\t"))
+        return indentation(width: width, from: column, tabs: useTabs)
     }
+
+    if let collect {
+        // Direct prose shares an item selection. Descendant items have their own.
+        let group = edits.first(where: \.direct)?.span.lowerBound
+        for var edit in edits {
+            if edit.direct {
+                edit.group = group
+            }
+            let startsItem = edit.span.lowerBound == 0
+            let coversItem = startsItem && edit.span.upperBound == consumed
+            collect(edit.nested(at: i) { width, column in
+                // Keep the content column stable when other parts of the item
+                // remain in the source, including nested items and code.
+                let preferred = outputMarker?(column) ?? marker
+                let preferredWidth = endColumn(preferred, from: column) - column
+                let prefix = coversItem || preferredWidth == contentColumn ? preferred : marker
+                let prefixWidth = endColumn(prefix, from: column) - column
+                let continuation = continuationPrefix(prefix, width: prefixWidth, column: column)
+                let rendered = edit.render(nestedWidth(width, removing: prefixWidth), column + prefixWidth)
+                return renderHanging(rendered, firstPrefix: startsItem ? prefix : continuation,
+                                     restPrefix: continuation, keepEmptyMarker: startsItem && allowsLazyLines)
+            })
+        }
+        return ([], i + parsed.consumed)
+    }
+    let restPrefix = continuationPrefix(firstPrefix, width: outputWidth, column: context.output)
     let rendered = renderHanging(
         parsed.rendered, firstPrefix: firstPrefix, restPrefix: restPrefix, keepEmptyMarker: allowsLazyLines
     )

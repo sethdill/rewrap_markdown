@@ -29,6 +29,66 @@ def check_status(arguments, source, status):
     assert bool(result.stderr) == (status == 2), (arguments, result.stderr)
 
 
+def check_range(arguments, source, expected, status=0, diagnostic=b''):
+    result = subprocess.run(COMMAND + arguments, input=source, capture_output=True, env=ENV)
+    assert result.returncode == status, (arguments, result.returncode, result.stderr)
+    assert result.stdout == expected, (arguments, result.stdout, expected)
+    if diagnostic:
+        assert diagnostic in result.stderr, (arguments, result.stderr)
+    else:
+        assert not result.stderr, (arguments, result.stderr)
+
+
+paragraphs = b'First paragraph\nis split.\n\nSecond paragraph\nis split.\n'
+check_range(['--lines', '2:2', '--unwrap'], paragraphs,
+            b'First paragraph is split.\n\nSecond paragraph\nis split.\n')
+check_range(['--lines', '5:5', '--lines', '1:2', '--lines', '2:4', '0'], paragraphs,
+            b'First paragraph is split.\n\nSecond paragraph is split.\n')
+check_range(['--lines', '1:1', '10'], b'One two three four',
+            b'One two\nthree four')
+
+quoted_list = (b'> - Parent stays  \n>   as written.\n>   - Child line\n'
+               b'>     continues here.\n>   - Another child\n>     stays split.\n')
+check_range(['--lines', '4:4', '--unwrap'], quoted_list,
+            b'> - Parent stays  \n>   as written.\n>   - Child line continues here.\n'
+            b'>   - Another child\n>     stays split.\n')
+loose_item = (b'- First part\n  stays prose.\n  \n  ```\n  code  \n  ```\n'
+              b'  \n  Second part\n  is also prose.\n')
+check_range(['--lines', '2:2', '--unwrap'], loose_item,
+            b'- First part stays prose.\n  \n  ```\n  code  \n  ```\n  \n  Second part is also prose.\n')
+check_range(['--lines', '5:5', '--unwrap'], loose_item, loose_item)
+check_range(['--lines', '2:2', '--repair', '--indent=tabs', '--unwrap'],
+            b'* First (`code` )\n  more words.\n* Leave unchanged.\n',
+            b'*\tFirst (`code`) more words.\n* Leave unchanged.\n')
+check_range(['--lines', '1:1', '--indent=tabs', '14'],
+            b'- Parent prose gets wrapped.\n  - Untouched child.\n',
+            b'- Parent prose\n  gets\n  wrapped.\n  - Untouched child.\n')
+
+fenced = b'Before\nthe fence.\n```md\n- keep  spaces\n```  \nAfter\nthe fence.\n'
+check_range(['--lines', '4:4', '--unwrap'], fenced, fenced)
+check_range(['--lines', '2:6', '--unwrap'], fenced,
+            b'Before the fence.\n```md\n- keep  spaces\n```  \nAfter the fence.\n')
+indented = b'    indented  \r\n    code \r\n\r\nAfter\r\nthe code.'
+check_range(['--lines', '2:2', '--unwrap'], indented, indented)
+mixed_endings = b'Cafe\xcc\x81  \r\n\t \r\nSelected\r\nprose.\r\n \nLast line  '
+check_range(['--lines', '4:4', '--unwrap'], mixed_endings,
+            b'Cafe\xcc\x81  \r\n\t \r\nSelected prose.\r\n \nLast line  ')
+check_range(['--lines', '2:2', '--unwrap'], b'First\rOnly line selected.\r',
+            b'First Only line selected.\r')
+
+check_status(['--lines', '2:2', '--unwrap'], paragraphs, 1)
+check_status(['--lines', '4:4', '--unwrap'], fenced, 0)
+check_status(['--lines', '5:5', '--unwrap'], b'First part\nis split.\r\n\r\n# Header  \r\nLast line.', 0)
+for arguments in (['--lines'], ['--lines', '1'], ['--lines', '0:1'],
+                  ['--lines', '2:1'], ['--lines', '1:2:3'], ['--lines', '+1:2'],
+                  ['--lines', '1: 2'], ['--lines=1:2']):
+    check_range(arguments, paragraphs, b'', 2, b'--lines START:END')
+check_range(['--lines', '1:6'], paragraphs, b'', 2, b'out of bounds')
+check_range(['--lines', '1:1'], b'', b'', 2, b'out of bounds')
+check_range(['--lines', '1:1', '--check'], b'\xff', b'', 2, b'UTF-8')
+check_range(['--lines', '1:1', '--commit'], paragraphs, b'', 2, b'cannot be used with --commit')
+
+
 check(['--version'], '', 'rewrap-markdown ' + (ROOT / 'VERSION').read_text().strip() + '\n')
 check(['16'], 'These words should wrap across lines.\n',
       'These words\nshould wrap\nacross lines.\n')

@@ -6,12 +6,14 @@ import RewrapMarkdownCore
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 let usage = """
-Usage: rewrap-markdown [--check] [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
+Usage: rewrap-markdown [--check] [--lines START:END]... [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
 
 Read Markdown from standard input and write the transformed text to standard output.
 
   --check   Compare UTF-8 bytes without writing formatted output.
             Exit 0 if unchanged, 1 if different, or 2 for argument or input errors.
+  --lines   Rewrap blocks touching inclusive, 1-based input lines. Repeatable.
+            Incompatible with --commit.
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
   --repair  Fix spacing around enclosed code and keep paired delimiters with adjacent words.
@@ -41,8 +43,19 @@ func fail(_ message: String) -> Never {
 
 var indent = RewrapMarkdown.IndentStyle.preserve
 var widthArguments: [String] = []
-for argument in arguments {
-    if argument == "--indent" || argument.hasPrefix("--indent=") {
+var ranges: [RewrapMarkdown.LineRange] = []
+var argumentIterator = arguments.makeIterator()
+let strict = check || arguments.contains("--lines")
+while let argument = argumentIterator.next() {
+    if argument == "--lines" {
+        guard let value = argumentIterator.next(),
+              let range = RewrapMarkdown.LineRange(value) else {
+            fail("Expected --lines START:END with positive, ascending line numbers.")
+        }
+        ranges.append(range)
+    } else if argument.hasPrefix("--lines=") {
+        fail("Expected --lines START:END.")
+    } else if argument == "--indent" || argument.hasPrefix("--indent=") {
         guard argument.hasPrefix("--indent="),
               let style = RewrapMarkdown.IndentStyle(rawValue: String(argument.dropFirst("--indent=".count))) else {
             fail("Expected --indent=preserve, --indent=tabs, or --indent=spaces.")
@@ -50,12 +63,15 @@ for argument in arguments {
         indent = style
     } else if let value = Int(argument) {
         widthArguments.append(String(value))
-    } else if check && !["--check", "--unwrap", "--commit", "--repair"].contains(argument) {
+    } else if strict && !["--check", "--unwrap", "--commit", "--repair"].contains(argument) {
         fail("Unexpected argument: \(argument)")
     }
 }
-if check && widthArguments.count > 1 {
+if strict && widthArguments.count > 1 {
     fail("Expected at most one width argument.")
+}
+if commitMessage && !ranges.isEmpty {
+    fail("--lines cannot be used with --commit.")
 }
 let width = RewrapMarkdown.width(
     arguments: widthArguments,
@@ -66,7 +82,7 @@ let width = RewrapMarkdown.width(
 )
 
 let input: Data
-if check {
+if strict {
     do {
         input = try FileHandle.standardInput.readToEnd() ?? Data()
     } catch {
@@ -76,12 +92,18 @@ if check {
     input = FileHandle.standardInput.readDataToEndOfFile()
 }
 let decodedInput = String(data: input, encoding: .utf8)
-if check && decodedInput == nil {
+if strict && decodedInput == nil {
     fail("Standard input is not valid UTF-8.")
 }
 let text = decodedInput ?? ""
 let output: String
-if commitMessage {
+if !ranges.isEmpty {
+    do {
+        output = try RewrapMarkdown.rewrap(text, lines: ranges, width: unwrap ? 0 : width, indent: indent, repair: repair)
+    } catch {
+        fail(error.localizedDescription)
+    }
+} else if commitMessage {
     output = RewrapMarkdown.rewrapCommitMessage(text, width: unwrap ? 0 : width, indent: indent, repair: repair)
 } else {
     output = RewrapMarkdown.rewrap(text, width: unwrap ? 0 : width, indent: indent, repair: repair)

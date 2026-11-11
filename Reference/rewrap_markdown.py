@@ -47,7 +47,7 @@ import os
 import re
 import sys
 import unicodedata
-from typing import Literal, Optional
+from typing import Callable, Literal, NamedTuple, Optional
 
 VERSION = "0.3"
 DEFAULT_WIDTH = 70
@@ -101,8 +101,8 @@ def normalize_width(width: int) -> int:
     return 0 if width == 0 else max(1, width)
 
 
-def get_width(fallback: int = DEFAULT_WIDTH) -> int:
-    for argument in sys.argv[1:]:
+def get_width(arguments: list[str], fallback: int = DEFAULT_WIDTH) -> int:
+    for argument in arguments:
         try:
             return normalize_width(int(argument))
         except ValueError:
@@ -123,12 +123,14 @@ def version_string() -> str:
 
 
 def usage_string() -> str:
-    return """Usage: rewrap-markdown [--check] [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
+    return """Usage: rewrap-markdown [--check] [--lines START:END]... [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
 
 Read Markdown from standard input and write the transformed text to standard output.
 
   --check   Compare UTF-8 bytes without writing formatted output.
             Exit 0 if unchanged, 1 if different, or 2 for argument or input errors.
+  --lines   Rewrap blocks touching inclusive, 1-based input lines. Repeatable.
+            Incompatible with --commit.
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
   --repair  Fix spacing around enclosed code and keep paired delimiters with adjacent words.
@@ -495,13 +497,31 @@ def nested_width(width: int, prefix_width: int) -> int:
     return 0 if width == 0 else max(1, width - prefix_width)
 
 
+class ProseEdit(NamedTuple):
+    # Spans are local to the current container.
+    span: tuple[int, int]
+    group: Optional[int]
+    direct: bool
+    render: Callable[[int, int], list[str]]
+
+    def nested(self, offset: int, render: Callable[[int, int], list[str]]) -> "ProseEdit":
+        start, end = self.span
+        return ProseEdit(
+            (start + offset, end + offset),
+            self.group + offset if self.group is not None else None,
+            False,
+            render,
+        )
+
+
 def process_block(lines: list[str], width: int, style: str, repair: bool) -> list[str]:
     rendered, _ = process_blocks(lines, width, set(), style, 0, 0, repair)
     return rendered
 
 
 def process_blocks(
-    lines: list[str], width: int, lazy_lines: set[int], style: str, input_col: int, output_col: int, repair: bool
+    lines: list[str], width: int, lazy_lines: set[int], style: str,
+    input_col: int, output_col: int, repair: bool, edits: Optional[list[ProseEdit]] = None,
 ) -> tuple[list[str], int]:
     # A line missing list indentation can extend a paragraph, but cannot
     # start a block or extend a protected block such as a code fence.
@@ -631,6 +651,7 @@ def process_blocks(
         # reapply the prefix.
         bqm = BLOCKQUOTE_RE.match(syntax)
         if bqm:
+            start = i
             inner = []
             while i < n and i not in lazy_lines:
                 m = BLOCKQUOTE_RE.match(block_syntax(lines[i], input_col))
@@ -639,10 +660,19 @@ def process_blocks(
                 inner.append(m.group(2))
                 i += 1
             prefix_width = 2  # "> "
+            quoted_edits = [] if edits is not None else None
             rendered, _ = process_blocks(
                 inner, nested_width(width, prefix_width), set(), style,
-                input_col + bqm.end(1), output_col + prefix_width, repair
+                input_col + bqm.end(1), output_col + prefix_width, repair, quoted_edits
             )
+            if edits is not None:
+                prefix = syntax[:bqm.end(1)]
+                for edit in quoted_edits:
+                    def render_quote(width, column, edit=edit, prefix=prefix):
+                        rendered = edit.render(nested_width(width, len(prefix)), column + len(prefix))
+                        return [prefix + line if line else prefix.rstrip() for line in rendered]
+
+                    edits.append(edit.nested(start, render_quote))
             for rline in rendered:
                 out.append("> " + rline if rline else ">")
             continue
@@ -654,7 +684,7 @@ def process_blocks(
             first_text = line[fnm.end(2):]
             rendered, i = process_list_item(
                 lines, i, marker, first_text, width, lazy_lines, style, input_col, output_col,
-                repair=repair, allows_lazy_lines=False
+                repair=repair, allows_lazy_lines=False, edits=edits
             )
             out.extend(rendered)
             continue
@@ -669,26 +699,33 @@ def process_blocks(
                 _, excess = drop_indent(padding, marker_end, 1)
                 first_text = excess + first_text
                 padding = " "
-            output_marker = render_list_marker(
-                leading, marker, padding, tab_padding, style, input_col, output_col
-            )
+            def output_marker(column, leading=leading, marker=marker, padding=padding, tab_padding=tab_padding):
+                return render_list_marker(leading, marker, padding, tab_padding, style, input_col, column)
             rendered, i = process_list_item(
                 lines, i, leading + marker + padding, first_text, width, lazy_lines,
-                style, input_col, output_col, repair=repair, allows_lazy_lines=True, output_marker=output_marker
+                style, input_col, output_col, repair=repair, allows_lazy_lines=True, output_marker=output_marker, edits=edits
             )
-            if not tab_padding and style == "preserve" and not tab_stops_shift:
+            if rendered and not tab_padding and style == "preserve" and not tab_stops_shift:
                 rendered[0] = line.rstrip()
             out.extend(rendered)
             continue
 
         # Otherwise: plain paragraph. Gather contiguous non-blank lines that
         # don't start a new block construct.
+        start = i
         para: list[str] = [line]
         i += 1
         while i < n and not BLANK_RE.match(lines[i]) and not starts_new_block(lines[i], input_col):
             para.append(lines[i])
             i += 1
-        out.extend(wrap_paragraph_text(para, width, output_col, repair))
+        if edits is None:
+            out.extend(wrap_paragraph_text(para, width, output_col, repair))
+        else:
+            def render_paragraph(width, column, para=para):
+                return wrap_paragraph_text(para, width, column, repair)
+
+            span = (start, i)
+            edits.append(ProseEdit(span, None, True, render_paragraph))
 
     return out, i
 
@@ -723,10 +760,11 @@ def process_list_item(
     *,
     repair: bool,
     allows_lazy_lines: bool,
-    output_marker: Optional[str] = None,
+    output_marker: Optional[Callable[[int], str]] = None,
+    edits: Optional[list[ProseEdit]] = None,
 ) -> tuple[list[str], int]:
     content_col = end_column(marker, input_col) - input_col
-    first_prefix = output_marker if output_marker is not None else marker
+    first_prefix = output_marker(output_col) if output_marker is not None else marker
     output_width = end_column(first_prefix, output_col) - output_col
     original_continuation = None
     n = len(lines)
@@ -773,16 +811,46 @@ def process_list_item(
         item.append(text)
         j += 1
 
+    item_edits = [] if edits is not None else None
     rendered, consumed = process_blocks(
         item, nested_width(width, output_width), lazy_lines, style,
-        input_col + content_col, output_col + output_width, repair
+        input_col + content_col, output_col + output_width, repair, item_edits
     )
-    use_tabs = allows_lazy_lines and (style == "tabs" or "\t" in first_prefix)
-    rest_prefix = indentation(output_width, output_col, use_tabs)
-    if style == "preserve" and original_continuation is not None:
-        index, prefix = original_continuation
-        if index < consumed and end_column(prefix, output_col) == output_col + output_width:
-            rest_prefix = prefix
+    def continuation_prefix(prefix, width, column):
+        if style == "preserve" and original_continuation is not None:
+            index, original = original_continuation
+            if index < consumed and end_column(original, column) == column + width:
+                return original
+        use_tabs = allows_lazy_lines and (style == "tabs" or "\t" in prefix)
+        return indentation(width, column, use_tabs)
+
+    if edits is not None:
+        # Direct prose shares an item selection. Descendant items have their own.
+        group = next((edit.span[0] for edit in item_edits if edit.direct), None)
+        for edit in item_edits:
+            if edit.direct:
+                edit = edit._replace(group=group)
+            starts_item = edit.span[0] == 0
+            covers_item = starts_item and edit.span[1] == consumed
+
+            def render_item(width, column, edit=edit, starts_item=starts_item, covers_item=covers_item):
+                # Keep the content column stable when other parts of the item
+                # remain in the source, including nested items and code.
+                preferred = output_marker(column) if output_marker is not None else marker
+                preferred_width = end_column(preferred, column) - column
+                prefix = preferred if covers_item or preferred_width == content_col else marker
+                prefix_width = end_column(prefix, column) - column
+                continuation = continuation_prefix(prefix, prefix_width, column)
+                rendered = edit.render(nested_width(width, prefix_width), column + prefix_width)
+                return render_hanging(
+                    rendered, prefix if starts_item else continuation, continuation,
+                    starts_item and allows_lazy_lines,
+                )
+
+            edits.append(edit.nested(i, render_item))
+        return [], i + consumed
+
+    rest_prefix = continuation_prefix(first_prefix, output_width, output_col)
     # Each gathered line corresponds to one source line, including the marker line.
     return render_hanging(rendered, first_prefix, rest_prefix, allows_lazy_lines), i + consumed
 
@@ -811,6 +879,52 @@ def rewrap(text: str, width: int, indent: str = "preserve", repair: bool = False
         result += "\n"
     
     return result
+
+
+def rewrap_lines(
+    text: str, ranges: list[tuple[int, int]], width: int, indent: str, repair: bool,
+) -> str:
+    parts = re.split(r"(\r\n|[\r\n])", text)
+    lines = parts[::2]
+    endings = parts[1::2]
+    if lines[-1]:
+        endings.append("")
+    else:
+        lines.pop()
+    for start, end in ranges:
+        if end > len(lines):
+            raise ValueError(f"--lines {start}:{end} is out of bounds for input with {len(lines)} lines.")
+
+    edits = []
+    width = normalize_width(width)
+    process_blocks(lines, width, set(), indent, 0, 0, repair, edits)
+    ranges = sorted(ranges)
+    selected = set()
+    range_index = 0
+    for edit in edits:
+        first, end = edit.span
+        while range_index < len(ranges) and ranges[range_index][1] <= first:
+            range_index += 1
+        if range_index < len(ranges) and ranges[range_index][0] <= end:
+            selected.add(edit.group if edit.group is not None else first)
+
+    output = []
+    cursor = 0
+    for edit in edits:
+        first, end = edit.span
+        if (edit.group if edit.group is not None else first) not in selected:
+            continue
+        output.extend(line + ending for line, ending in zip(lines[cursor:first], endings[cursor:first]))
+        rendered = edit.render(width, 0)
+        for index, line in enumerate(rendered):
+            if index == len(rendered) - 1:
+                ending = endings[end - 1]
+            else:
+                ending = endings[min(first + index, max(first, end - 2))] or "\n"
+            output.append(line + ending)
+        cursor = end
+    output.extend(line + ending for line, ending in zip(lines[cursor:], endings[cursor:]))
+    return "".join(output)
 
 
 def commit_trailer_block_start(lines: list[str]) -> Optional[int]:
@@ -898,28 +1012,48 @@ def main():
     arguments = sys.argv[1:]
     check = "--check" in arguments
     indent = "preserve"
-    width_count = 0
-    for argument in arguments:
-        if argument == "--indent" or argument.startswith("--indent="):
+    strict = check or "--lines" in arguments
+    ranges = []
+    width_arguments = []
+    argument_iterator = iter(arguments)
+    for argument in argument_iterator:
+        if argument == "--lines":
+            value = next(argument_iterator, "")
+            if not re.fullmatch(r"[0-9]+:[0-9]+", value):
+                fail("Expected --lines START:END with positive, ascending line numbers.")
+            try:
+                start, end = map(int, value.split(":"))
+            except ValueError:
+                fail("Expected --lines START:END with positive, ascending line numbers.")
+            if start < 1 or end < start or end > sys.maxsize:
+                fail("Expected --lines START:END with positive, ascending line numbers.")
+            ranges.append((start, end))
+        elif argument.startswith("--lines="):
+            fail("Expected --lines START:END.")
+        elif argument == "--indent" or argument.startswith("--indent="):
             indent = argument.removeprefix("--indent=")
             if indent not in ("preserve", "tabs", "spaces"):
                 fail("Expected --indent=preserve, --indent=tabs, or --indent=spaces.")
-        elif check and argument not in ("--check", "--unwrap", "--commit", "--repair"):
+        elif argument not in ("--check", "--unwrap", "--commit", "--repair"):
             try:
                 int(argument)
             except ValueError:
-                fail(f"Unexpected argument: {argument}")
-            width_count += 1
-    if width_count > 1:
+                if strict:
+                    fail(f"Unexpected argument: {argument}")
+            else:
+                width_arguments.append(argument)
+    if strict and len(width_arguments) > 1:
         fail("Expected at most one width argument.")
 
     unwrap = "--unwrap" in arguments
     commit_message = "--commit" in arguments
     repair = "--repair" in arguments
-    width = get_width(
-        DEFAULT_COMMIT_MESSAGE_WIDTH if commit_message else DEFAULT_WIDTH
-    )
-    if check:
+    if commit_message and ranges:
+        fail("--lines cannot be used with --commit.")
+    width = get_width(width_arguments, DEFAULT_COMMIT_MESSAGE_WIDTH if commit_message else DEFAULT_WIDTH)
+    if unwrap:
+        width = 0
+    if strict:
         try:
             input_bytes = sys.stdin.buffer.read()
             data = input_bytes.decode("utf-8")
@@ -928,17 +1062,26 @@ def main():
         except (OSError, AttributeError) as error:
             fail(f"Could not read standard input: {error}")
         # Match the universal newline handling of sys.stdin.read().
-        data = data.replace("\r\n", "\n").replace("\r", "\n")
+        if not ranges:
+            data = data.replace("\r\n", "\n").replace("\r", "\n")
     else:
         data = sys.stdin.read()
 
-    if commit_message:
-        output = rewrap_commit_message(data, 0 if unwrap else width, indent=indent, repair=repair)
+    if ranges:
+        try:
+            output = rewrap_lines(data, ranges, width, indent, repair)
+        except ValueError as error:
+            fail(str(error))
+    elif commit_message:
+        output = rewrap_commit_message(data, width, indent=indent, repair=repair)
     else:
-        output = rewrap(data, 0 if unwrap else width, indent=indent, repair=repair)
+        output = rewrap(data, width, indent=indent, repair=repair)
     if check:
         raise SystemExit(0 if output.encode("utf-8") == input_bytes else 1)
-    sys.stdout.write(output)
+    if ranges:
+        sys.stdout.buffer.write(output.encode("utf-8"))
+    else:
+        sys.stdout.write(output)
 
 
 if __name__ == "__main__":
