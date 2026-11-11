@@ -268,6 +268,11 @@ formatting would change them, and `2` indicates an argument or input error
 reported on stderr. The check uses the requested width and supports
 `--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`.
 
+On macOS, redirecting a directory into stdin (for example, using `< .`)
+exits with status `2` in the Swift CLI and status `1` in the Python
+reference CLI. CPython rejects directory input during startup, before the
+reference script can handle the error.
+
 ### Unwrap Markdown
 
 Join each paragraph and list item onto one line before pasting Markdown into a
