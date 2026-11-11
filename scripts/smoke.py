@@ -71,6 +71,8 @@ check(['--indent=tabs', '--unwrap'], '* Text.\n\n  \t  code\tstays\n',
       '*\tText.\n\n\t    code\tstays\n')
 check(['--indent=spaces', '--unwrap'], '*\tText.\n\t```\n\tkeep\tspaces\n\t```\n',
       '*   Text.\n    ```\n    keep\tspaces\n    ```\n')
+check(['0'], 'Run `go`\n, then record the result.\n',
+      'Run `go`, then record the result.\n')
 # Repair is opt-in and composes with the existing CLI modes.
 repair_source = 'Before ( `code` ) after.\n'
 check(['0'], repair_source, repair_source)
@@ -88,8 +90,8 @@ for mode in ('--unwrap', '0'):
               prefix + body + suffix, prefix + expected_body + suffix)
 protected_repair = '```\n( `code` )\n```\n\n    ( `code` )\n'
 check(['--repair', '10'], protected_repair, protected_repair)
-check(['--repair', '0'], '( `` a ` b  `` ) `code` , [ `code` ]\n',
-      '(`` a ` b  ``) `code` , [ `code` ]\n')
+check(['--repair', '0'], '( `` a ` b  `` ) [ `code` ]\n',
+      '(`` a ` b  ``) [ `code` ]\n')
 
 invalid_indent = subprocess.run(COMMAND + ['--indent=invalid'], input='', text=True,
                                 capture_output=True, env=ENV)

@@ -46,6 +46,7 @@ Markdown, not for pathological edge cases.
 import os
 import re
 import sys
+import unicodedata
 from typing import Literal, Optional
 
 VERSION = "0.3"
@@ -79,15 +80,21 @@ HARD_BREAK_RE = re.compile(r"(\\|  +)$")
 COMMIT_COMMENT_RE = re.compile(r"^[ \t]*#")
 COMMIT_TRAILER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*[ \t]*[:=][ \t]+.+$")
 
-# Inline "atomic" spans that must never be split by the wrapper.
-INLINE_ATOMIC_RE = re.compile(
-    r"(?P<code>(`+).*?\2)"
-    r"|(?P<img>!\[[^\]]*\]\([^)]*\))"
-    r"|(?P<link>\[[^\]]*\]\([^)]*\))"
-    r"|(?P<reflink>\[[^\]]*\](?:\[[^\]]*\])?)"
-    r"|(?P<autolink><[^ >]+>)"
-    r"|(?P<url>https?://\S+)"
-)
+# Keep Markdown syntax opaque to punctuation rules, including bracketed text
+# that may reference a definition outside the supplied text.
+BRACKETED_TEXT = r"\[(?:\\.|[^\[\]\\]|\[[^\[\]]*\])*\]"
+LINK_DESTINATION = r"\((?:\\.|[^()\\]|\([^()]*\))*\)"
+INLINE_ATOMIC_RE = re.compile("|".join([
+    r"\\[!-/:-@\[-`{-~]",  # Markdown escape
+    r"(?<!`)(?P<backticks>`+)(?!`).*?(?<!`)(?P=backticks)(?!`)|`+",
+    rf"!?{BRACKETED_TEXT}{LINK_DESTINATION}|{BRACKETED_TEXT}(?:{BRACKETED_TEXT})?",
+    r"""<!--.*?-->|</?[a-zA-Z][a-zA-Z0-9-]*(?:[^<>"']|"[^"]*"|'[^']*')*>""",
+    r"<[^ >]+>|(?P<url>https?://\S+)",
+    r"\{\{.*?\}\}|\{%.*?%\}|\$\{[^}]*\}",  # Common template delimiters
+]))
+INLINE_WORD_RE = re.compile(r"(?:\S|[\u00A0\u202F])+")
+NONBREAKING_SPACES = "\u00A0\u202F"
+PARAGRAPH_EDGE_WHITESPACE_RE = re.compile(r"^[^\S\u00A0\u202F]+|[^\S\u00A0\u202F]+$")
 
 
 def normalize_width(width: int) -> int:
@@ -122,7 +129,7 @@ Read Markdown from standard input and write the transformed text to standard out
 
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
-  --repair  Fix spacing around parenthesized code and keep parentheses with adjacent words.
+  --repair  Fix spacing around enclosed code and keep paired delimiters with adjacent words.
   --indent  Set the list indentation style (default: preserve).
   --version Print the version."""
 
@@ -132,116 +139,187 @@ Read Markdown from standard input and write the transformed text to standard out
 # ---------------------------------------------------------------------------
 
 
-def tokenize_inline(text: str) -> list[str]:
-    """
-    Keep atomic spans whole and preserve their adjacency to surrounding text.
-    Only source whitespace outside an atomic span creates a wrap opportunity.
-    """
-    tokens: list[str] = []
-    token_end = 0
+class ProsePunctuation:
+    # Values are the separator to use in place of ordinary spaces or tabs.
+    # None means the wrapper may break between the tokens.
+    CLOSING_MARKS = {
+        ",": "", ".": "", "?": "", "!": "",
+        ":": " ", ";": " ",
+    }
+    INVERTED_MARKS = {"¿", "¡"}
+    DELIMITER_PAIRS = {
+        "(": {")"}, "{": {"}"},
+        '"': {'"'}, "'": {"'"},
+        "“": {"”"}, "„": {"“", "”"}, "‘": {"’"}, "‚": {"‘", "’"},
+        "«": {"»"}, "»": {"«"}, "‹": {"›"}, "›": {"‹"},
+    }
+    CODE_ENCLOSURES = {"(", "{"}
+    TRAILING_CLOSERS = {")", "]", "}", "”", "’", "»", "›", '"', "'"}
 
-    def append_token(start: int, end: int):
-        nonlocal token_end
-        token = text[start:end]
-        if tokens and start == token_end:
-            tokens[-1] += token
-        else:
-            tokens.append(token)
-        token_end = end
+    def __init__(self, text: str, opaque: list[bool], repair: bool):
+        self.text = text
+        self.opaque = opaque
+        self.repair = repair
+        self.openers: dict[int, int] = {}
+        self.closers: dict[int, int] = {}
+        if repair:
+            self.match_delimiters()
 
-    def append_words(start: int, end: int):
-        for word in re.finditer(r"\S+", text[start:end]):
-            append_token(start + word.start(), start + word.end())
+    def spacing(
+        self, previous: tuple[int, int], following: tuple[int, int], *,
+        previous_ends_in_code: bool, previous_ends_in_bare_url: bool,
+        next_code_end: Optional[int],
+    ) -> Optional[str]:
+        left = previous[1] - 1
+        right = following[0]
+        first = self.prose_character(right)
+        last = self.prose_character(left)
 
-    cursor = 0
-    for match in INLINE_ATOMIC_RE.finditer(text):
-        append_words(cursor, match.start())
-        append_token(match.start(), match.end())
-        cursor = match.end()
-    append_words(cursor, len(text))
-    return tokens
+        spacing = self.sentence_mark_spacing(first, following)
+        if spacing is not None and self.can_precede_sentence_mark(
+            previous, first, before_end=following[1] < len(self.text)
+        ):
+            # Appending punctuation to a bare URL can change its target.
+            return " " if previous_ends_in_bare_url else spacing
+        if last in self.INVERTED_MARKS and (first is not None or next_code_end is not None):
+            return ""
+
+        opener = self.closers.get(right)
+        if (opener is not None and self.prose_character(opener) in self.CODE_ENCLOSURES
+                and previous_ends_in_code):
+            return ""
+        closer = self.openers.get(left)
+        if (closer is not None and last in self.CODE_ENCLOSURES and next_code_end is not None
+                and self.first_non_space(next_code_end) == closer):
+            return ""
+
+        if left in self.openers or right in self.closers or (
+            self.repair and (last == "(" or first == ")")
+        ):
+            return " "
+        return None
+
+    def prose_character(self, index: int) -> Optional[str]:
+        if 0 <= index < len(self.text) and not self.opaque[index]:
+            return self.text[index]
+        return None
+
+    def first_non_space(self, index: int) -> int:
+        while self.prose_character(index) in {" ", "\t"}:
+            index += 1
+        return index
+
+    def sentence_mark_spacing(self, mark: Optional[str], token: tuple[int, int]) -> Optional[str]:
+        if mark is None or mark not in self.CLOSING_MARKS:
+            return None
+        end = token[0] + 1
+        if mark in {"?", "!"}:
+            while self.prose_character(end) in {"?", "!"}:
+                end += 1
+        # Closing delimiters can follow a mark, as in ?!” or .).
+        # A dot followed by a name, digit or another dot can be literal text.
+        if all(self.prose_character(index) in self.TRAILING_CLOSERS
+               for index in range(end, token[1])):
+            return self.CLOSING_MARKS[mark]
+        return None
+
+    def can_precede_sentence_mark(
+        self, previous: tuple[int, int], mark: Optional[str], *, before_end: bool
+    ) -> bool:
+        word = self.text[previous[0]:previous[1]]
+        # Swift checks the last grapheme. Skip combining accents to find its base.
+        last = next((char for char in reversed(word)
+                     if not unicodedata.category(char).startswith("M")), "")
+        if not last:
+            return False
+        if not (last.isalnum() or unicodedata.category(last).startswith("P") or last == "`"):
+            return False
+        # A separated period after a number may be a list marker or decimal.
+        return mark != "." or not before_end or not word.isnumeric()
+
+    def match_delimiters(self) -> None:
+        stack: list[tuple[int, set[str]]] = []
+        for index in range(len(self.text)):
+            mark = self.prose_character(index)
+            if mark is None:
+                continue
+            straight_quote = mark in {'"', "'"}
+            if (mark in {"’", "'"} and self.is_alphanumeric(index - 1)
+                    and self.is_alphanumeric(index + 1)):
+                continue
+            if (stack and mark in stack[-1][1]
+                    and (not straight_quote or not self.is_alphanumeric(index + 1))):
+                opener, _ = stack.pop()
+                self.openers[opener] = index
+                self.closers[index] = opener
+            elif mark in self.DELIMITER_PAIRS and (
+                not straight_quote or self.can_open_straight_quote(mark, index)
+            ):
+                stack.append((index, self.DELIMITER_PAIRS[mark]))
+
+    def is_alphanumeric(self, index: int) -> bool:
+        if not 0 <= index < len(self.text):
+            return False
+        return self.text[index].isalnum() or unicodedata.category(self.text[index]).startswith("M")
+
+    def can_open_straight_quote(self, mark: str, index: int) -> bool:
+        if self.is_alphanumeric(index - 1):
+            return False
+        # A word-initial apostrophe can signal an omission, as in 'tis.
+        return mark != "'" or self.prose_character(index + 1) == " "
 
 
-# Escapes and all inline atoms are opaque. Code delimiters must have equal
-# run lengths; unmatched runs cannot be mistaken for shorter code spans.
-REPAIR_ATOMIC_RE = re.compile(
-    r"\\[\s\S]|(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|`+"
-    r"|!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\([^)]*\)"
-    r"|\[[^\]]*\](?:\[[^\]]*\])?|<[^ >]+>|https?://\S+"
-)
+def tokenize_inline(text: str, repair: bool = False) -> list[str]:
+    opaque = [False] * len(text)
+    code_starts: dict[int, int] = {}
+    code_ends: set[int] = set()
+    bare_url_ends: set[int] = set()
+    ranges: list[tuple[int, int]] = []
 
-
-def tokenize_repair_inline(source: str) -> list[str]:
-    def atoms_and_mask(text):
-        atoms = list(REPAIR_ATOMIC_RE.finditer(text))
-        opaque = [False] * len(text)
-        for atom in atoms:
-            opaque[atom.start():atom.end()] = [True] * (atom.end() - atom.start())
-        return atoms, opaque
-
-    atoms, opaque = atoms_and_mask(source)
-    # Only tighten closing parentheses that have an opener in this segment.
-    depth = 0
-    matched_closers = set()
-    for index, char in enumerate(source):
-        if opaque[index]:
-            continue
-        if char == "(":
-            depth += 1
-        elif char == ")" and depth > 0:
-            depth -= 1
-            matched_closers.add(index)
-
-    removals = []
-    for atom in atoms:
-        if atom.group(1) is None:
-            continue
-        left, right = atom.span()
-        while right < len(source) and source[right] in " \t":
-            right += 1
-        if right not in matched_closers:
-            continue
-        if right > atom.end():
-            removals.append((atom.end(), right))
-
-        while left > 0 and source[left - 1] in " \t":
-            left -= 1
-        if (0 < left < atom.start()
-                and source[left - 1] == "(" and not opaque[left - 1]):
-            removals.append((left, atom.start()))
-    text = source
-    for start, end in sorted(removals, reverse=True):
-        text = text[:start] + text[end:]
-    atoms, opaque = atoms_and_mask(text)
-    ranges = []
-
-    def append(start, end):
+    def append_range(start: int, end: int) -> None:
         if ranges and ranges[-1][1] == start:
             ranges[-1] = (ranges[-1][0], end)
         else:
             ranges.append((start, end))
 
-    def words(start, end):
-        for word in re.finditer(r"\S+", text[start:end]):
-            append(start + word.start(), start + word.end())
+    def append_words(start: int, end: int) -> None:
+        for word in INLINE_WORD_RE.finditer(text, start, end):
+            append_range(*word.span())
 
     cursor = 0
-    for atom in atoms:
-        words(cursor, atom.start())
-        append(atom.start(), atom.end())
-        cursor = atom.end()
-    words(cursor, len(text))
-    tokens = []
-    previous_end = None
+    for atom in INLINE_ATOMIC_RE.finditer(text):
+        start, end = atom.span()
+        append_words(cursor, start)
+        append_range(start, end)
+        opaque[start:end] = [True] * (end - start)
+        if atom.group("backticks"):
+            code_starts[start] = end
+            code_ends.add(end)
+        elif atom.group("url"):
+            bare_url_ends.add(end)
+        cursor = end
+    append_words(cursor, len(text))
+
+    punctuation = ProsePunctuation(text, opaque, repair)
+    tokens: list[str] = []
+    previous: Optional[tuple[int, int]] = None
     for start, end in ranges:
-        closes = text[start] == ")" and not opaque[start]
-        opens = (previous_end is not None and text[previous_end - 1] == "("
-                 and not opaque[previous_end - 1])
-        if tokens and (opens or closes):
-            tokens[-1] += " " + text[start:end]
+        word = text[start:end]
+        spacing = None
+        if previous is not None:
+            spacing = punctuation.spacing(
+                previous, (start, end),
+                previous_ends_in_code=previous[1] in code_ends,
+                previous_ends_in_bare_url=previous[1] in bare_url_ends,
+                next_code_end=code_starts.get(start),
+            )
+        if previous is None or spacing is None:
+            tokens.append(word)
         else:
-            tokens.append(text[start:end])
-        previous_end = end
+            gap = text[previous[1]:start]
+            separator = spacing if all(char in " \t" for char in gap) else gap
+            tokens[-1] += separator + word
+        previous = (start, end)
     return tokens
 
 
@@ -276,6 +354,17 @@ def wrap_tokens(tokens: list[str], width: int, column: int) -> list[str]:
     return lines or [""]
 
 
+def join_paragraph_lines(lines: list[str]) -> str:
+    parts: list[str] = []
+    for line in lines:
+        if not line:
+            continue
+        if parts and parts[-1][-1] not in NONBREAKING_SPACES and line[0] not in NONBREAKING_SPACES:
+            parts.append(" ")
+        parts.append(line)
+    return "".join(parts)
+
+
 def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: bool) -> list[str]:
     """
     Reflow a paragraph's raw source lines to `width` columns.
@@ -290,25 +379,25 @@ def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: b
     buf: list[str] = []
     
     for line in raw_lines:
-        stripped = line.strip()
-        m = HARD_BREAK_RE.search(line.rstrip("\n"))
+        stripped = PARAGRAPH_EDGE_WHITESPACE_RE.sub("", line)
+        m = HARD_BREAK_RE.search(line)
         
         if m and stripped:
             break_style = "\\" if m.group(1) == "\\" else "  "
             # strip the break marker itself from the text
-            text_part = line.rstrip("\n")[: m.start()].rstrip()
-            buf.append(text_part.strip())
-            segments.append((" ".join(w for w in buf if w), break_style))
+            text_part = line[:m.start()]
+            buf.append(PARAGRAPH_EDGE_WHITESPACE_RE.sub("", text_part))
+            segments.append((join_paragraph_lines(buf), break_style))
             buf = []
         else:
             buf.append(stripped)
     
     if buf:
-        segments.append((" ".join(w for w in buf if w), None))
+        segments.append((join_paragraph_lines(buf), None))
 
     out_lines: list[str] = []
-    for i, (text, break_style) in enumerate(segments):
-        tokens = tokenize_repair_inline(text) if repair else tokenize_inline(text)
+    for text, break_style in segments:
+        tokens = tokenize_inline(text, repair)
         wrapped = wrap_tokens(tokens, width, column) if tokens else [""]
         if break_style is not None and wrapped:
             wrapped[-1] = wrapped[-1] + break_style

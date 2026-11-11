@@ -110,11 +110,6 @@ private let gfmAlertMarker = RegexPattern(#"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUT
 private let hardBreak = RegexPattern(#"(\\|  +)$"#)
 private let commitComment = RegexPattern(#"^[ \t]*#"#)
 private let commitTrailer = RegexPattern(#"^[A-Za-z0-9][A-Za-z0-9-]*[ \t]*[:=][ \t]+.+$"#)
-private let inlineAtomic = RegexPattern(
-    #"(`+).*?\1|!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\([^)]*\)|\[[^\]]*\](?:\[[^\]]*\])?|<[^ >]+>|https?://\S+"#
-)
-private let inlineWords = RegexPattern(#"\S+"#)
-
 private struct IndentContext {
     let style: RewrapMarkdown.IndentStyle
     var input = 0
@@ -316,122 +311,80 @@ private func processBlock(
     return (output, i)
 }
 
-private func tokenizeInline(_ text: String) -> [String] {
-    var tokens: [String] = []
-    var tokenEnd = 0
+// Markdown syntax is opaque to punctuation rules. Treat bare square brackets
+// as potentially referencing definitions outside the supplied text.
+private let bracketedText = #"\[(?:\\.|[^\[\]\\]|\[[^\[\]]*\])*\]"#
+private let linkDestination = #"\((?:\\.|[^()\\]|\([^()]*\))*\)"#
+private let inlineAtomic = RegexPattern([
+    #"\\[!-/:-@\[-`{-~]"#, // Markdown escape
+    #"(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|`+"#, // Code span or unmatched backtick run
+    #"!?\#(bracketedText)\#(linkDestination)|\#(bracketedText)(?:\#(bracketedText))?"#,
+    #"<!--.*?-->|</?[a-zA-Z][a-zA-Z0-9-]*(?:[^<>"']|"[^"]*"|'[^']*')*>"#,
+    #"<[^ >]+>|(https?://\S+)"#, // Autolink or bare URL
+    #"\{\{.*?\}\}|\{%.*?%\}|\$\{[^}]*\}"#, // Common template delimiters
+].joined(separator: "|"))
+// Nonbreaking spaces are part of a word rather than wrap opportunities.
+private let inlineWords = RegexPattern(#"(?:\S|[\u00A0\u202F])+"#)
 
-    // Adjacent source ranges form one token. Only source whitespace outside
-    // an atomic span creates an opportunity to wrap.
-    func appendToken(_ range: NSRange) {
-        let token = substring(text, utf16Range: range)
-        if !tokens.isEmpty, range.location == tokenEnd {
-            tokens[tokens.count - 1] += token
-        } else {
-            tokens.append(token)
-        }
-        tokenEnd = range.location + range.length
-    }
-
-    func appendWords(from start: Int, to end: Int) {
-        let gap = substring(text, utf16Range: NSRange(location: start, length: end - start))
-        for word in inlineWords.matches(in: gap) {
-            appendToken(NSRange(location: start + word.range.location, length: word.range.length))
-        }
-    }
-
-    var cursor = 0
-    for match in inlineAtomic.matches(in: text) {
-        appendWords(from: cursor, to: match.range.location)
-        appendToken(match.range)
-        cursor = match.range.location + match.range.length
-    }
-    appendWords(from: cursor, to: text.utf16.count)
-    return tokens
-}
-
-// Repair has its own lexer so the default tokenizer retains its behavior.
-// Escapes, exact-length backtick delimiters, and other inline atoms are opaque.
-private let repairAtomic = RegexPattern(
-    #"\\[\s\S]|(?<!`)(`+)(?!`).*?(?<!`)\1(?!`)|`+|!\[[^\]]*\]\([^)]*\)|\[[^\]]*\]\([^)]*\)|\[[^\]]*\](?:\[[^\]]*\])?|<[^ >]+>|https?://\S+"#
-)
-
-private func tokenizeRepairInline(_ source: String) -> [String] {
-    func atomsAndMask(_ text: String) -> ([RegexMatch], [Bool]) {
-        let atoms = repairAtomic.matches(in: text)
-        var opaque = Array(repeating: false, count: text.utf16.count)
-        for atom in atoms {
-            for i in atom.range.location..<NSMaxRange(atom.range) { opaque[i] = true }
-        }
-        return (atoms, opaque)
-    }
-
-    let (sourceAtoms, sourceOpaque) = atomsAndMask(source)
-    let original = source as NSString
-    let edited = NSMutableString(string: source)
-    // Only tighten closing parentheses that have an opener in this segment.
-    var depth = 0
-    var matchedClosers: Set<Int> = []
-    for i in 0..<original.length where !sourceOpaque[i] {
-        switch original.character(at: i) {
-        case 40: depth += 1
-        case 41 where depth > 0:
-            depth -= 1
-            matchedClosers.insert(i)
-        default: break
-        }
-    }
-
-    var removals: [NSRange] = []
-    for atom in sourceAtoms where !atom[1].isEmpty {
-        let end = NSMaxRange(atom.range)
-        var right = end
-        while right < original.length, original.character(at: right) == 32 || original.character(at: right) == 9 { right += 1 }
-        guard matchedClosers.contains(right) else { continue }
-        if right > end {
-            removals.append(NSRange(location: end, length: right - end))
-        }
-
-        var left = atom.range.location
-        while left > 0, original.character(at: left - 1) == 32 || original.character(at: left - 1) == 9 { left -= 1 }
-        if left > 0, left < atom.range.location,
-           original.character(at: left - 1) == 40, !sourceOpaque[left - 1] {
-            removals.append(NSRange(location: left, length: atom.range.location - left))
-        }
-    }
-    for range in removals.sorted(by: { $0.location > $1.location }) { edited.deleteCharacters(in: range) }
-    let text = edited as String
-    let (atoms, opaque) = atomsAndMask(text)
-    let ns = text as NSString
+private func tokenizeInline(_ source: String, repair: Bool) -> [String] {
+    let text = source as NSString
+    var opaque = Array(repeating: false, count: text.length)
+    var codeStarts: [Int: Int] = [:]
+    var codeEnds: Set<Int> = []
+    var bareURLEnds: Set<Int> = []
     var ranges: [NSRange] = []
+
+    // Adjacent source ranges form a single token.
     func append(_ range: NSRange) {
         if let last = ranges.last, NSMaxRange(last) == range.location {
             ranges[ranges.count - 1].length += range.length
-        } else { ranges.append(range) }
+        } else {
+            ranges.append(range)
+        }
     }
-    func words(_ start: Int, _ end: Int) {
-        let gap = ns.substring(with: NSRange(location: start, length: end - start))
+
+    func appendWords(from start: Int, to end: Int) {
+        let gap = text.substring(with: NSRange(location: start, length: end - start))
         for word in inlineWords.matches(in: gap) {
             append(NSRange(location: start + word.range.location, length: word.range.length))
         }
     }
-    var cursor = 0
-    for atom in atoms {
-        words(cursor, atom.range.location)
-        append(atom.range)
-        cursor = NSMaxRange(atom.range)
-    }
-    words(cursor, ns.length)
 
+    var cursor = 0
+    for atom in inlineAtomic.matches(in: source) {
+        let start = atom.range.location
+        let end = NSMaxRange(atom.range)
+        appendWords(from: cursor, to: start)
+        append(atom.range)
+        for index in start..<end { opaque[index] = true }
+        if !atom[1].isEmpty {
+            codeStarts[start] = end
+            codeEnds.insert(end)
+        } else if !atom[2].isEmpty {
+            bareURLEnds.insert(end)
+        }
+        cursor = end
+    }
+    appendWords(from: cursor, to: text.length)
+
+    let punctuation = ProsePunctuation(text: text, opaque: opaque, repair: repair)
     var tokens: [String] = []
-    var previousEnd: Int? = nil
+    var previous: NSRange?
     for range in ranges {
-        let end = NSMaxRange(range)
-        let closes = ns.character(at: range.location) == 41 && !opaque[range.location]
-        let opens = previousEnd.map { ns.character(at: $0 - 1) == 40 && !opaque[$0 - 1] } ?? false
-        if !tokens.isEmpty, opens || closes {
-            tokens[tokens.count - 1] += " " + ns.substring(with: range)
-        } else { tokens.append(ns.substring(with: range)) }
-        previousEnd = end
+        let word = text.substring(with: range)
+        if let previous, let spacing = punctuation.spacing(
+            after: previous, before: range,
+            previousEndsInCode: codeEnds.contains(NSMaxRange(previous)),
+            previousEndsInBareURL: bareURLEnds.contains(NSMaxRange(previous)),
+            nextCodeEnd: codeStarts[range.location]
+        ) {
+            let end = NSMaxRange(previous)
+            let gap = text.substring(with: NSRange(location: end, length: range.location - end))
+            tokens[tokens.count - 1] += spacing.separator(for: gap) + word
+        } else {
+            tokens.append(word)
+        }
+        previous = range
     }
     return tokens
 }
@@ -533,18 +486,35 @@ private func nestedWidth(_ width: Int, removing prefixLength: Int) -> Int {
     width == 0 ? 0 : max(1, width - prefixLength)
 }
 
+private let nonbreakingSpaces: Set<Character> = ["\u{00A0}", "\u{202F}"]
+private let paragraphWhitespace = CharacterSet.whitespacesAndNewlines.subtracting(
+    CharacterSet(charactersIn: "\u{00A0}\u{202F}")
+)
+
+private func joinParagraphLines(_ lines: [String]) -> String {
+    var joined = ""
+    for line in lines where !line.isEmpty {
+        if let last = joined.last, let first = line.first,
+           !nonbreakingSpaces.contains(last), !nonbreakingSpaces.contains(first) {
+            joined += " "
+        }
+        joined += line
+    }
+    return joined
+}
+
 private func wrapParagraphText(_ rawLines: [String], width: Int, column: Int, repair: Bool) -> [String] {
     var segments: [(text: String, breakStyle: String?)] = []
     var buffer: [String] = []
 
     for line in rawLines {
-        let stripped = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let stripped = line.trimmingCharacters(in: paragraphWhitespace)
         let withoutNewline = line
         if let match = hardBreak.firstMatch(in: withoutNewline), !stripped.isEmpty {
             let breakStyle = match[1] == "\\" ? "\\" : "  "
-            let textPart = trimRight(substring(withoutNewline, toUTF16Offset: match.range.location))
-            buffer.append(textPart.trimmingCharacters(in: .whitespaces))
-            segments.append((buffer.filter { !$0.isEmpty }.joined(separator: " "), breakStyle))
+            let textPart = substring(withoutNewline, toUTF16Offset: match.range.location)
+            buffer.append(textPart.trimmingCharacters(in: paragraphWhitespace))
+            segments.append((joinParagraphLines(buffer), breakStyle))
             buffer.removeAll()
         } else {
             buffer.append(stripped)
@@ -552,12 +522,12 @@ private func wrapParagraphText(_ rawLines: [String], width: Int, column: Int, re
     }
 
     if !buffer.isEmpty {
-        segments.append((buffer.filter { !$0.isEmpty }.joined(separator: " "), nil))
+        segments.append((joinParagraphLines(buffer), nil))
     }
 
     var output: [String] = []
     for segment in segments {
-        let tokens = repair ? tokenizeRepairInline(segment.text) : tokenizeInline(segment.text)
+        let tokens = tokenizeInline(segment.text, repair: repair)
         var wrapped = tokens.isEmpty ? [""] : wrapTokens(tokens, width: width, column: column)
         if let breakStyle = segment.breakStyle, !wrapped.isEmpty {
             wrapped[wrapped.count - 1] += breakStyle

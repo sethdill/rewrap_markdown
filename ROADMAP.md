@@ -42,14 +42,17 @@ is published. Later releases list planned work.
 See the [completed publishing checklist](RELEASING.md#v03-publishing-checklist)
 and the [tap maintenance notes](Packaging/homebrew/README.md).
 
-## Later releases
+## 0.4
 
 ### Punctuation repair
 
-- [ ] Define when opt-in `--repair` should remove spaces before punctuation
-  following inline spans, for example changing `` `code` , `` to
-  `` `code`, ``. Decide which marks and contexts qualify, and cover the rules
-  with shared Swift and Python cases. Basic rewrap preserves source adjacency.
+- [x] Keep prose punctuation with its neighboring word or inline span in basic
+  wrapping and unwrapping, including repairs such as `` `code` , `` to
+  `` `code`, ``.
+- [x] Extend opt-in repair to matched prose braces and quote wrapping, with
+  shared Swift and Python regression cases.
+
+## Later releases
 
 ### Check mode and pre-commit integration
 

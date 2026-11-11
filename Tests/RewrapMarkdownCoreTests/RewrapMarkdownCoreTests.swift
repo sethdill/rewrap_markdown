@@ -24,7 +24,7 @@ final class RewrapMarkdownCoreTests: XCTestCase {
     }
 
     func testSwiftCoreFormattingOptions() {
-        for testCase in formattingCases + repairCases {
+        for testCase in formattingCases + repairCases + punctuationCases {
             let result = testCase.commit
                 ? RewrapMarkdown.rewrapCommitMessage(testCase.input, width: testCase.width, indent: testCase.indent, repair: testCase.repair)
                 : RewrapMarkdown.rewrap(testCase.input, width: testCase.width, indent: testCase.indent, repair: testCase.repair)
@@ -45,7 +45,7 @@ final class RewrapMarkdownCoreTests: XCTestCase {
 
     func testPythonFormattingOptions() throws {
         let pythonFilter = try originalPythonFilterPath()
-        for testCase in formattingCases + repairCases {
+        for testCase in formattingCases + repairCases + punctuationCases {
             XCTAssertEqual(
                 try runProcess(
                     "/usr/bin/env", arguments: ["python3", pythonFilter] + testCase.arguments,
@@ -58,7 +58,7 @@ final class RewrapMarkdownCoreTests: XCTestCase {
 
     func testSwiftExecutableFormattingOptions() throws {
         let executable = try swiftExecutablePath()
-        for testCase in formattingCases + repairCases {
+        for testCase in formattingCases + repairCases + punctuationCases {
             XCTAssertEqual(
                 try runProcess(executable, arguments: testCase.arguments, input: testCase.input),
                 testCase.expected, testCase.name
@@ -520,8 +520,7 @@ private let repairCases: [FormattingCase] = {
                "(`` a ` b  ``) (` ( x ) `) ( ```x`` )\n"),
         sample("escaped syntax", #"\( `x` ) ( `y` \) ( \`z\` )"# + "\n",
                #"\( `x` ) ( `y` \) ( \`z\` )"# + "\n"),
-        sample("punctuation and brackets deferred", "`code` , `code` . [ `code` ]\n",
-               "`code` , `code` . [ `code` ]\n"),
+        sample("potential reference brackets are protected", "[ `code` ]\n", "[ `code` ]\n"),
         sample("opaque inline content", "See [label ( `x` )](https://example.com) and <https://example.com/(x)> https://example.com/(`x`) ` ( x ) `.\n",
                "See [label ( `x` )](https://example.com) and <https://example.com/(x)> https://example.com/(`x`) ` ( x ) `.\n"),
         sample("hard break boundary", "Before (  \n`code` ) after.\n", "Before (  \n`code` ) after.\n"),
@@ -546,6 +545,53 @@ private let repairCases: [FormattingCase] = {
         }
     }
     return cases
+}()
+
+private let punctuationCases: [FormattingCase] = {
+    func sample(_ name: String, _ input: String, _ expected: String,
+                width: Int = 0, repair: Bool = false) -> FormattingCase {
+        FormattingCase(name: name, width: width, indent: .preserve, commit: false,
+                       arguments: (repair ? ["--repair"] : []) + (width == 0 ? ["--unwrap"] : [String(width)]),
+                       input: input, expected: expected, repair: repair)
+    }
+
+    return [
+        sample("soft breaks before prose punctuation", "Run `go`\n, then stop\n.\n", "Run `go`, then stop.\n"),
+        sample("punctuation after a decomposed accent", "Try cafe\u{0301} , then stop.\n",
+               "Try cafe\u{0301}, then stop.\n"),
+        sample("punctuation travels with code", "Run `go` , now.\n", "Run\n`go`,\nnow.\n", width: 5),
+        sample("inverted and closing marks", "¿ Qué tal ? ¡ Muy bien ! Really ?!\n",
+               "¿Qué tal? ¡Muy bien! Really?!\n"),
+        sample("opening inverted mark travels with word", "Ask ¿ Qué tal ?\n",
+               "Ask\n¿Qué\ntal?\n", width: 5),
+        sample("colon and semicolon retain a space", "Say hello : goodbye ; farewell.\n",
+               "Say\nhello :\ngoodbye ;\nfarewell.\n", width: 7),
+        sample("nonbreaking spaces survive", "Un mot\u{202F}! «\u{00A0}bonjour\u{00A0}»\n",
+               "Un\nmot\u{202F}!\n«\u{00A0}bonjour\u{00A0}»\n", width: 4, repair: true),
+        sample("nonbreaking space across a soft break", "Un mot\u{202F}\n!\n",
+               "Un mot\u{202F}!\n"),
+        sample("sentence period after a number", "The answer is 42 .\n", "The answer is 42.\n"),
+        sample("literal punctuation", "Use .env and ... and 3 . 14 and x ?query.\n",
+               "Use .env and ... and 3 . 14 and x ?query.\n", repair: true),
+        sample("punctuation stays outside a bare URL", "Open https://example.com/path ?\n",
+               "Open\nhttps://example.com/path ?\n", width: 20),
+        sample("nested link label and destination",
+               "Open [note [x] , y](https://example.com/(path)) .\n",
+               "Open [note [x] , y](https://example.com/(path)).\n"),
+        sample("protected inline punctuation and escapes",
+               #"Keep [x , y](https://example.com?q=1) `x ! y` <span title="x , y"> and x \? y."# + "\n",
+               #"Keep [x , y](https://example.com?q=1) `x ! y` <span title="x , y"> and x \? y."# + "\n",
+               repair: true),
+        sample("hard breaks and blank lines", "Run go  \n, now.\n\n.\n",
+               "Run go  \n, now.\n\n.\n"),
+        sample("code braces and protected templates",
+               "Use { `go` } or {such as `go` }. Keep {{ `go` }} and ${ `go` }.\n",
+               "Use {`go`} or {such as `go`}. Keep {{ `go` }} and ${ `go` }.\n", repair: true),
+        sample("matched curly quotes retain interior space", "Before “ hello there ” after.\n",
+               "Before\n“ hello\nthere ”\nafter.\n", width: 8, repair: true),
+        sample("straight quotes and apostrophes", "Before \" don't go \" after.\n",
+               "Before\n\" don't\ngo \"\nafter.\n", width: 8, repair: true),
+    ]
 }()
 
 private let compatibilityCases = [

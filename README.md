@@ -267,6 +267,12 @@ and intentional hard line breaks are preserved.
 
 ### Repair Parentheses (Opt-in)
 
+Both implementations join prose commas, periods, question marks, and
+exclamation marks to the preceding word or inline span in every wrap mode.
+Inverted question and exclamation marks join the following word. Colons and
+semicolons stay with the preceding text when wrapping, with their space
+preserved. Explicit nonbreaking spaces and hard line breaks are preserved.
+
 Use `rewrap-markdown --repair 70` to remove spacing between an inline code span
 and a matched closing parenthesis. For example, ``(such as `code` )`` becomes
 ``(such as `code`)``. When the span is the entire parenthetical, repair also
@@ -282,9 +288,11 @@ remain boundaries; repair does not join across them.
 
 `--repair` works with `--unwrap` and width `0` (repair before joining), all
 `--indent=preserve|tabs|spaces` styles, and `--commit` (body only; subject,
-comments, and trailers stay unchanged). Without `--repair`, existing wrapping
-and whitespace behavior is unchanged. Spaced punctuation after inline spans,
-bracket spacing, and additional list normalization are deferred.
+comments, and trailers stay unchanged). `--repair` also applies the code
+spacing rule to matched prose braces and keeps matched quotes with the text
+they enclose. Interior quote spacing is preserved.
+Square brackets remain protected as potential Markdown references, and
+recognized template delimiters are treated as syntax.
 
 ### List Indentation
 

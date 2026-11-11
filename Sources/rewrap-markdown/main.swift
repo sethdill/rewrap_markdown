@@ -12,7 +12,7 @@ Read Markdown from standard input and write the transformed text to standard out
 
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
-  --repair  Fix spacing around parenthesized code and keep parentheses with adjacent words.
+  --repair  Fix spacing around enclosed code and keep paired delimiters with adjacent words.
   --indent  Set the list indentation style (default: preserve).
   --version Print the version.
 """
