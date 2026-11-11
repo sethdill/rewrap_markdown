@@ -21,6 +21,14 @@ def check(arguments, source, expected):
     assert not result.stderr, result.stderr
 
 
+def check_status(arguments, source, status):
+    result = subprocess.run(COMMAND + ['--check'] + arguments, input=source,
+                            capture_output=True, env=ENV)
+    assert result.returncode == status, (arguments, result.returncode, status, result.stderr)
+    assert result.stdout == b'', (arguments, result.stdout)
+    assert bool(result.stderr) == (status == 2), (arguments, result.stderr)
+
+
 check(['--version'], '', 'rewrap-markdown ' + (ROOT / 'VERSION').read_text().strip() + '\n')
 check(['16'], 'These words should wrap across lines.\n',
       'These words\nshould wrap\nacross lines.\n')
@@ -106,6 +114,28 @@ check(['--commit', '16'], commit, wrapped)
 check(['--commit', '--unwrap'], wrapped, commit)
 check(['--commit', '0'], wrapped, commit)
 check(['--commit'], commit, commit)
+
+check_status(['16'], b'These words\nshould wrap\nacross lines.\n', 0)
+check_status(['16'], b'These words should wrap across lines.\n', 1)
+check_status([], b'', 0)
+check_status([], b'Hello.\r\n', 1)
+for mode in ('--unwrap', '0'):
+    check_status([mode], unwrapped.encode('utf-8'), 0)
+    check_status([mode], source.encode('utf-8'), 1)
+check_status(['0'], b'( `code` )\n', 0)
+check_status(['--repair', '0'], b'( `code` )\n', 1)
+check_status(['--commit', '16'], wrapped.encode('utf-8'), 0)
+check_status(['--commit', '16'], commit.encode('utf-8'), 1)
+check_status(['--indent=spaces', '20'], wrapped_tabs.expandtabs(4).encode('utf-8'), 0)
+check_status(['--indent=spaces', '20'], wrapped_tabs.encode('utf-8'), 1)
+for arguments in (['--unknown'], ['wide'], ['16', '20'], ['--indent=invalid']):
+    check_status(arguments, b'', 2)
+check_status([], b'\xff', 2)
+with open(os.devnull, 'wb') as write_only:
+    read_error = subprocess.run(COMMAND + ['--check'], stdin=write_only,
+                                capture_output=True, env=ENV)
+assert read_error.returncode == 2 and not read_error.stdout, read_error
+assert b'Could not read standard input' in read_error.stderr
 
 # Invoke the installed hook through Git itself, including its failure path.
 with tempfile.TemporaryDirectory(prefix='rewrap smoke ') as directory:

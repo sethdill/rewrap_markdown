@@ -253,6 +253,21 @@ Or rewrap text on the macOS clipboard:
 pbpaste | rewrap-markdown 72 | pbcopy
 ```
 
+### Check Formatting
+
+Use `--check` to test whether formatting would change a document.
+
+```sh
+rewrap-markdown --check 80 < draft.md
+python3 Reference/rewrap_markdown.py --check 80 < draft.md
+```
+
+Both CLIs compare the formatted UTF-8 bytes with the original stdin bytes
+and leave stdout empty. Exit status `0` means the bytes match, `1` means
+formatting would change them, and `2` indicates an argument or input error
+reported on stderr. The check uses the requested width and supports
+`--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`.
+
 ### Unwrap Markdown
 
 Join each paragraph and list item onto one line before pasting Markdown into a

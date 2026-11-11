@@ -123,10 +123,12 @@ def version_string() -> str:
 
 
 def usage_string() -> str:
-    return """Usage: rewrap-markdown [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
+    return """Usage: rewrap-markdown [--check] [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
 
 Read Markdown from standard input and write the transformed text to standard output.
 
+  --check   Compare UTF-8 bytes without writing formatted output.
+            Exit 0 if unchanged, 1 if different, or 2 for argument or input errors.
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
   --repair  Fix spacing around enclosed code and keep paired delimiters with adjacent words.
@@ -880,6 +882,11 @@ def rewrap_commit_message(
     return result + "\n" if had_trailing_newline else result
 
 
+def fail(message: str):
+    print(message, file=sys.stderr)
+    raise SystemExit(2)
+
+
 def main():
     if "--version" in sys.argv[1:] or "-v" in sys.argv[1:]:
         print(version_string())
@@ -889,23 +896,49 @@ def main():
         return
 
     arguments = sys.argv[1:]
+    check = "--check" in arguments
     indent = "preserve"
+    width_count = 0
     for argument in arguments:
         if argument == "--indent" or argument.startswith("--indent="):
             indent = argument.removeprefix("--indent=")
             if indent not in ("preserve", "tabs", "spaces"):
-                print("Expected --indent=preserve, --indent=tabs, or --indent=spaces.", file=sys.stderr)
-                raise SystemExit(2)
+                fail("Expected --indent=preserve, --indent=tabs, or --indent=spaces.")
+        elif check and argument not in ("--check", "--unwrap", "--commit", "--repair"):
+            try:
+                int(argument)
+            except ValueError:
+                fail(f"Unexpected argument: {argument}")
+            width_count += 1
+    if width_count > 1:
+        fail("Expected at most one width argument.")
+
     unwrap = "--unwrap" in arguments
     commit_message = "--commit" in arguments
+    repair = "--repair" in arguments
     width = get_width(
         DEFAULT_COMMIT_MESSAGE_WIDTH if commit_message else DEFAULT_WIDTH
     )
-    data = sys.stdin.read()
-    if commit_message:
-        sys.stdout.write(rewrap_commit_message(data, 0 if unwrap else width, indent=indent, repair="--repair" in arguments))
+    if check:
+        try:
+            input_bytes = sys.stdin.buffer.read()
+            data = input_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            fail("Standard input is not valid UTF-8.")
+        except (OSError, AttributeError) as error:
+            fail(f"Could not read standard input: {error}")
+        # Match the universal newline handling of sys.stdin.read().
+        data = data.replace("\r\n", "\n").replace("\r", "\n")
     else:
-        sys.stdout.write(rewrap(data, 0 if unwrap else width, indent=indent, repair="--repair" in arguments))
+        data = sys.stdin.read()
+
+    if commit_message:
+        output = rewrap_commit_message(data, 0 if unwrap else width, indent=indent, repair=repair)
+    else:
+        output = rewrap(data, 0 if unwrap else width, indent=indent, repair=repair)
+    if check:
+        raise SystemExit(0 if output.encode("utf-8") == input_bytes else 1)
+    sys.stdout.write(output)
 
 
 if __name__ == "__main__":
