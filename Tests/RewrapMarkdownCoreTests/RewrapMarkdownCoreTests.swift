@@ -514,8 +514,8 @@ private let repairCases: [FormattingCase] = {
         sample("overlong parenthetical endpoints", "( longword )\n", "( longword )\n", width: 3),
         sample("disabled preserves code spacing", "Before ( `code` ) after.\n",
                "Before ( `code` ) after.\n", repair: false),
-        sample("disabled allows parenthesis wrap", "Before ( `code` ) after.\n",
-               "Before (\n`code` )\nafter.\n", width: 10, repair: false),
+        sample("default wrapping keeps parentheses and code together", "Before ( `code` ) after.\n",
+               "Before\n( `code` )\nafter.\n", width: 10, repair: false),
         sample("code contents and delimiter lengths", "( `` a ` b  `` ) ( ` ( x ) ` ) ( ```x`` )\n",
                "(`` a ` b  ``) (` ( x ) `) ( ```x`` )\n"),
         sample("escaped syntax", #"\( `x` ) ( `y` \) ( \`z\` )"# + "\n",
@@ -571,6 +571,32 @@ private let punctuationCases: [FormattingCase] = {
         sample("nonbreaking space across a soft break", "Un mot\u{202F}\n!\n",
                "Un mot\u{202F}!\n"),
         sample("sentence period after a number", "The answer is 42 .\n", "The answer is 42.\n"),
+        sample("spaced period after a number cannot start the next line",
+               "It came to 42 . Then she left.\n", "It came to\n42 . Then she\nleft.\n", width: 14),
+        sample("closing parenthesis in default prose wrapping",
+               "We saw (parenthetical ) today.\n", "We saw\n(parenthetical )\ntoday.\n", width: 13),
+        sample("spaced braces and quotes in default prose wrapping",
+               "Before { hello there } and “ hello there ” after.\n",
+               "Before\n{ hello\nthere }\nand\n“ hello\nthere ”\nafter.\n", width: 8),
+        sample("punctuation after emoji and inline markup",
+               "Yay 🎉 ! See <https://example.com> , and <em>hello</em> .\n",
+               "Yay 🎉! See <https://example.com>, and <em>hello</em>.\n"),
+        sample("inverted question mark stays with link",
+               "Before ¿ [link](url) now ?\n", "Before\n¿ [link](url)\nnow?\n", width: 8),
+        sample("ellipses and non-ASCII sentence marks stay with prose",
+               "Wait please … and wait ... Really ？！ What ؟ Stop 。\n",
+               "Wait\nplease …\nand\nwait ...\nReally ？！\nWhat ؟\nStop 。\n", width: 8),
+        sample("fullwidth parentheses and corner quotes",
+               "Try （ hello there ） or 「 hello there 」 after.\n",
+               "Try\n（ hello\nthere ）\nor\n「 hello\nthere 」\nafter.\n", width: 8),
+        sample("thin space survives a soft break before punctuation",
+               "Mot\u{2009}\n! Next.\n", "Mot\u{2009}!\nNext.\n", width: 4),
+        sample("literal backslash stays off the end of a line",
+               "Intro \\ more words.\n", "Intro\n\\ more\nwords.\n", width: 7),
+        sample("even trailing backslashes remain a soft break",
+               "Intro \\\\\nmore words.\n", "Intro \\\\ more words.\n"),
+        sample("odd trailing backslashes preserve the hard break",
+               "Intro\\\\\\\nmore words.\n", "Intro\\\\\\\nmore words.\n"),
         sample("literal punctuation", "Use .env and ... and 3 . 14 and x ?query.\n",
                "Use .env and ... and 3 . 14 and x ?query.\n", repair: true),
         sample("punctuation stays outside a bare URL", "Open https://example.com/path ?\n",
@@ -591,6 +617,63 @@ private let punctuationCases: [FormattingCase] = {
                "Before\n“ hello\nthere ”\nafter.\n", width: 8, repair: true),
         sample("straight quotes and apostrophes", "Before \" don't go \" after.\n",
                "Before\n\" don't\ngo \"\nafter.\n", width: 8, repair: true),
+    ]
+}()
+
+private let markdownBlockCases: [CompatibilityCase] = {
+    let lead = "The release notes have a longer introduction and a short closing"
+    let markers = [
+        "- more prose", "+ more prose", "* more prose", "- [x] checked",
+        "1. more prose", "1) more prose", "> more prose", "# a heading",
+        "---", "===", "***", "_ _ _", "| --- | --- |", "~~~sample",
+        "<div> more prose", "<!-- an inline comment -->",
+        "<?xml version=\"1.0\"?> more prose", "<!DOCTYPE html> more prose",
+        "<![CDATA[content]]> more prose",
+    ]
+    let cases = markers.map { marker in
+        CompatibilityCase(
+            name: "prose wrap avoids creating a block from \(marker)",
+            width: 70,
+            input: "\(lead) aside \(marker)\n",
+            expected: "\(lead)\naside \(marker)\n"
+        )
+    }
+    let nestedLead = "A release note section has an introduction and a short closing"
+    let nested = [(">", ">"), ("-", " ")].map { marker, continuation in
+        CompatibilityCase(
+            name: "prose inside \(marker) avoids creating a nested block",
+            width: 70,
+            input: "\(marker) \(nestedLead) aside - more prose\n",
+            expected: "\(marker) \(nestedLead)\n\(continuation) aside - more prose\n"
+        )
+    }
+    let longWord = String(repeating: "x", count: 70)
+    let tableLead = String(repeating: "words ", count: 10) + "alpha |"
+    return cases + nested + [
+        CompatibilityCase(
+            name: "a wrap cannot introduce a GFM table delimiter under a header",
+            width: 70,
+            input: "\(tableLead) hi --- | ---\n",
+            expected: "\(tableLead)\nhi --- | ---\n"
+        ),
+        CompatibilityCase(
+            name: "a wrap may exceed width to avoid introducing a Markdown heading",
+            width: 70,
+            input: "\(longWord) # more prose\n",
+            expected: "\(longWord) #\nmore prose\n"
+        ),
+        CompatibilityCase(
+            name: "a wrap avoids stranding opening punctuation as a thematic break",
+            width: 70,
+            input: "_ _ _ \(longWord)\n",
+            expected: "_ _ _ \(longWord)\n"
+        ),
+        CompatibilityCase(
+            name: "inline punctuation with no block meaning keeps its wrap opportunity",
+            width: 70,
+            input: "\(lead) aside #topic 1.25\n",
+            expected: "\(lead) aside\n#topic 1.25\n"
+        ),
     ]
 }()
 
@@ -772,7 +855,7 @@ private let compatibilityCases = [
 
         """
     ),
-]
+] + markdownBlockCases
 
 private func originalPythonFilterPath() throws -> String {
     let environment = ProcessInfo.processInfo.environment

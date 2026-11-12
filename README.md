@@ -303,13 +303,21 @@ rewrap-markdown --unwrap < draft.md > draft-unwrapped.md
 Width `0` is equivalent to `--unwrap`. Markdown structure, protected blocks,
 and intentional hard line breaks are preserved.
 
-### Repair Parentheses (Opt-in)
+### Prose Punctuation
 
 Both implementations join prose commas, periods, question marks, and
 exclamation marks to the preceding word or inline span in every wrap mode.
 Inverted question and exclamation marks join the following word. Colons and
 semicolons stay with the preceding text when wrapping, with their space
-preserved. Explicit nonbreaking spaces and hard line breaks are preserved.
+preserved. Ellipses and supported non-ASCII sentence marks also stay with
+the preceding text and retain their spacing. Spaced parentheses, braces,
+and matched quotes stay with the adjacent text. Longer passages can wrap
+inside those delimiters. An inseparable group may exceed the requested
+width. Wrapping also keeps inline markers with preceding prose when starting
+a new line with them could create a Markdown block. Nonbreaking spaces, thin
+spaces before punctuation, and hard line breaks are preserved.
+
+### Repair Spacing Around Inline Code (Opt-in)
 
 Use `rewrap-markdown --repair 70` to remove spacing between an inline code span
 and a matched closing parenthesis. For example, ``(such as `code` )`` becomes
@@ -318,17 +326,13 @@ removes spacing after the opener, so ``( `code` )`` becomes ``(`code`)``.
 These repairs apply to spaces, tabs, and spacing joined from soft line breaks.
 `( ordinary words )` and ``( `code` plus prose )`` retain their spacing.
 
-Repair also keeps opening parentheses with the following word and closing
-parentheses with the preceding word. Longer parentheticals can wrap internally.
-An inseparable group may exceed the requested width. Code contents, escapes,
-links, URLs, and protected blocks are opaque to repair. Intentional hard breaks
-remain boundaries; repair does not join across them.
+Code contents, escapes, links, URLs, and protected blocks are opaque to repair.
+Intentional hard breaks remain boundaries.
 
 `--repair` works with `--unwrap` and width `0` (repair before joining), all
 `--indent=preserve|tabs|spaces` styles, and `--commit` (body only; subject,
 comments, and trailers stay unchanged). `--repair` also applies the code
-spacing rule to matched prose braces and keeps matched quotes with the text
-they enclose. Interior quote spacing is preserved.
+spacing rule to matched prose braces. Interior quote spacing is preserved.
 Square brackets remain protected as potential Markdown references, and
 recognized template delimiters are treated as syntax.
 

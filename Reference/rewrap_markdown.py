@@ -74,9 +74,11 @@ HTML_BLOCK_START_RE = re.compile(
 )
 HTML_COMMENT_START_RE = re.compile(r"^ {0,3}<!--")
 HTML_COMMENT_END_RE = re.compile(r"-->\s*$")
+HTML_DECLARATION_START_RE = re.compile(r"^ {0,3}<(?:\?|![A-Za-z]|!\[CDATA\[)")
 FRONT_MATTER_DELIM_RE = re.compile(r"^-{3,}\s*$")
 GFM_ALERT_MARKER_RE = re.compile(r"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$")
-HARD_BREAK_RE = re.compile(r"(\\|  +)$")
+# Only an odd run of backslashes ends in an unescaped hard-break marker.
+HARD_BREAK_RE = re.compile(r"(?<!\\)(?:\\\\)*(\\)$| {2,}$")
 COMMIT_COMMENT_RE = re.compile(r"^[ \t]*#")
 COMMIT_TRAILER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]*[ \t]*[:=][ \t]+.+$")
 
@@ -93,8 +95,8 @@ INLINE_ATOMIC_RE = re.compile("|".join([
     r"\{\{.*?\}\}|\{%.*?%\}|\$\{[^}]*\}",  # Common template delimiters
 ]))
 INLINE_WORD_RE = re.compile(r"(?:\S|[\u00A0\u202F])+")
-NONBREAKING_SPACES = "\u00A0\u202F"
-PARAGRAPH_EDGE_WHITESPACE_RE = re.compile(r"^[^\S\u00A0\u202F]+|[^\S\u00A0\u202F]+$")
+PARAGRAPH_BOUNDARY_SPACES = "\u00A0\u2009\u202F"
+PARAGRAPH_EDGE_WHITESPACE_RE = re.compile(r"^[^\S\u00A0\u2009\u202F]+|[^\S\u00A0\u2009\u202F]+$")
 
 
 def normalize_width(width: int) -> int:
@@ -133,7 +135,7 @@ Read Markdown from standard input and write the transformed text to standard out
             Incompatible with --commit.
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
-  --repair  Fix spacing around enclosed code and keep paired delimiters with adjacent words.
+  --repair  Fix spacing around inline code enclosed in parentheses or braces.
   --indent  Set the list indentation style (default: preserve).
   --version Print the version."""
 
@@ -149,6 +151,9 @@ class ProsePunctuation:
     CLOSING_MARKS = {
         ",": "", ".": "", "?": "", "!": "",
         ":": " ", ";": " ",
+        "…": " ", "。": " ", "，": " ", "、": " ",
+        "？": " ", "！": " ", "؟": " ", "،": " ",
+        "；": " ", "：": " ", "؛": " ",
     }
     INVERTED_MARKS = {"¿", "¡"}
     DELIMITER_PAIRS = {
@@ -156,9 +161,11 @@ class ProsePunctuation:
         '"': {'"'}, "'": {"'"},
         "“": {"”"}, "„": {"“", "”"}, "‘": {"’"}, "‚": {"‘", "’"},
         "«": {"»"}, "»": {"«"}, "‹": {"›"}, "›": {"‹"},
+        "（": {"）"}, "「": {"」"}, "『": {"』"},
     }
     CODE_ENCLOSURES = {"(", "{"}
-    TRAILING_CLOSERS = {")", "]", "}", "”", "’", "»", "›", '"', "'"}
+    TRAILING_CLOSERS = {")", "]", "}", "”", "’", "»", "›", '"', "'", "）", "」", "』"}
+    EXPRESSIVE_MARKS = {"?", "!", "…", "？", "！", "؟"}
 
     def __init__(self, text: str, opaque: list[bool], repair: bool):
         self.text = text
@@ -166,8 +173,7 @@ class ProsePunctuation:
         self.repair = repair
         self.openers: dict[int, int] = {}
         self.closers: dict[int, int] = {}
-        if repair:
-            self.match_delimiters()
+        self.match_delimiters()
 
     def spacing(
         self, previous: tuple[int, int], following: tuple[int, int], *,
@@ -179,27 +185,31 @@ class ProsePunctuation:
         first = self.prose_character(right)
         last = self.prose_character(left)
 
+        # Moving a literal backslash to the end of the line creates a hard break.
+        if last == "\\":
+            return " "
+
         spacing = self.sentence_mark_spacing(first, following)
-        if spacing is not None and self.can_precede_sentence_mark(
-            previous, first, before_end=following[1] < len(self.text)
-        ):
-            # Appending punctuation to a bare URL can change its target.
-            return " " if previous_ends_in_bare_url else spacing
-        if last in self.INVERTED_MARKS and (first is not None or next_code_end is not None):
-            return ""
+        if spacing is not None:
+            word = self.text[previous[0]:previous[1]]
+            # Preserve ambiguous numeric spacing and keep punctuation outside bare URLs.
+            if (previous_ends_in_bare_url or word[-1].isspace()
+                    or (first == "." and following[1] < len(self.text) and word.isnumeric())):
+                return " "
+            return spacing
+        if last in self.INVERTED_MARKS:
+            return "" if first is not None or next_code_end is not None else " "
 
         opener = self.closers.get(right)
-        if (opener is not None and self.prose_character(opener) in self.CODE_ENCLOSURES
+        if (self.repair and opener is not None and self.prose_character(opener) in self.CODE_ENCLOSURES
                 and previous_ends_in_code):
             return ""
         closer = self.openers.get(left)
-        if (closer is not None and last in self.CODE_ENCLOSURES and next_code_end is not None
+        if (self.repair and closer is not None and last in self.CODE_ENCLOSURES and next_code_end is not None
                 and self.first_non_space(next_code_end) == closer):
             return ""
 
-        if left in self.openers or right in self.closers or (
-            self.repair and (last == "(" or first == ")")
-        ):
+        if left in self.openers or right in self.closers or last == "(" or first == ")":
             return " "
         return None
 
@@ -216,30 +226,21 @@ class ProsePunctuation:
     def sentence_mark_spacing(self, mark: Optional[str], token: tuple[int, int]) -> Optional[str]:
         if mark is None or mark not in self.CLOSING_MARKS:
             return None
+        spacing = self.CLOSING_MARKS[mark]
         end = token[0] + 1
-        if mark in {"?", "!"}:
-            while self.prose_character(end) in {"?", "!"}:
+        if mark == "." and self.prose_character(end) == self.prose_character(end + 1) == ".":
+            spacing = " "
+            while self.prose_character(end) == ".":
+                end += 1
+        if mark in self.EXPRESSIVE_MARKS:
+            while self.prose_character(end) in self.EXPRESSIVE_MARKS:
                 end += 1
         # Closing delimiters can follow a mark, as in ?!” or .).
-        # A dot followed by a name, digit or another dot can be literal text.
+        # A dot followed by a name or digit can be literal text.
         if all(self.prose_character(index) in self.TRAILING_CLOSERS
                for index in range(end, token[1])):
-            return self.CLOSING_MARKS[mark]
+            return spacing
         return None
-
-    def can_precede_sentence_mark(
-        self, previous: tuple[int, int], mark: Optional[str], *, before_end: bool
-    ) -> bool:
-        word = self.text[previous[0]:previous[1]]
-        # Swift checks the last grapheme. Skip combining accents to find its base.
-        last = next((char for char in reversed(word)
-                     if not unicodedata.category(char).startswith("M")), "")
-        if not last:
-            return False
-        if not (last.isalnum() or unicodedata.category(last).startswith("P") or last == "`"):
-            return False
-        # A separated period after a number may be a list marker or decimal.
-        return mark != "." or not before_end or not word.isnumeric()
 
     def match_delimiters(self) -> None:
         stack: list[tuple[int, set[str]]] = []
@@ -327,6 +328,42 @@ def tokenize_inline(text: str, repair: bool = False) -> list[str]:
     return tokens
 
 
+def starts_wrapped_block(line: str, column: int) -> bool:
+    return bool(
+        starts_new_block(line, column)
+        or SETEXT_H1_RE.match(line)
+        or SETEXT_H2_RE.match(line)
+        or TABLE_DELIM_RE.match(line)
+        or HTML_DECLARATION_START_RE.match(line)
+    )
+
+
+def could_start_wrapped_block(tokens: list[str], index: int, column: int) -> bool:
+    token = tokens[index]
+    initial = token[0]
+    if not (initial.isnumeric() or initial in "-+*#>[`~<=_|:"):
+        return False
+    following = tokens[index + 1] if index + 1 < len(tokens) else ""
+    pair = token + " " + following
+    # Look ahead for list content and for spaced thematic breaks like "_ _ _".
+    return (
+        starts_wrapped_block(token, column)
+        or starts_wrapped_block(pair, column)
+        or (index + 2 < len(tokens) and HR_RE.match(pair + " " + tokens[index + 2]) is not None)
+    )
+
+
+def keep_markdown_markers_with_prose(tokens: list[str], column: int) -> list[str]:
+    groups: list[str] = []
+    start = 0
+    for index in range(1, len(tokens) + 1):
+        if index < len(tokens) and could_start_wrapped_block(tokens, index, column):
+            continue
+        groups.append(" ".join(tokens[start:index]))
+        start = index
+    return groups
+
+
 def wrap_tokens(tokens: list[str], width: int, column: int) -> list[str]:
     """
     Greedy word-wrap a token stream to `width` columns. A single token longer
@@ -341,16 +378,19 @@ def wrap_tokens(tokens: list[str], width: int, column: int) -> list[str]:
     current_len: int = 0
     tok: str
     
-    for tok in tokens:
+    for tok in keep_markdown_markers_with_prose(tokens, column):
         token_start = column + current_len + (1 if current else 0)
         next_len = end_column(tok, token_start) - column
         if current and next_len > width:
-            lines.append(" ".join(current))
-            current = [tok]
-            current_len = end_column(tok, column) - column
-        else:
-            current.append(tok)
-            current_len = next_len
+            line = " ".join(current)
+            # Opening punctuation in prose can become a block if it stands alone.
+            if lines or not starts_wrapped_block(line, column):
+                lines.append(line)
+                current = [tok]
+                current_len = end_column(tok, column) - column
+                continue
+        current.append(tok)
+        current_len = next_len
     
     if current:
         lines.append(" ".join(current))
@@ -363,7 +403,8 @@ def join_paragraph_lines(lines: list[str]) -> str:
     for line in lines:
         if not line:
             continue
-        if parts and parts[-1][-1] not in NONBREAKING_SPACES and line[0] not in NONBREAKING_SPACES:
+        if (parts and parts[-1][-1] not in PARAGRAPH_BOUNDARY_SPACES
+                and line[0] not in PARAGRAPH_BOUNDARY_SPACES):
             parts.append(" ")
         parts.append(line)
     return "".join(parts)
@@ -389,7 +430,7 @@ def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: b
         if m and stripped:
             break_style = "\\" if m.group(1) == "\\" else "  "
             # strip the break marker itself from the text
-            text_part = line[:m.start()]
+            text_part = line[:-1] if break_style == "\\" else line[:m.start()]
             buf.append(PARAGRAPH_EDGE_WHITESPACE_RE.sub("", text_part))
             segments.append((join_paragraph_lines(buf), break_style))
             buf = []

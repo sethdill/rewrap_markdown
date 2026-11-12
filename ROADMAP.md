@@ -53,6 +53,23 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 - [x] Extend opt-in repair to matched prose braces and quote wrapping, with
   shared Swift and Python regression cases.
 
+### Bugs
+
+- [x] Prevent wrap boundaries from turning prose into Markdown lists,
+  blockquotes, headings, thematic breaks, fences, tables, or HTML blocks.
+- [x] Prevent a literal backslash in prose from becoming a Markdown hard break.
+- [x] Keep spaced parentheses, braces, and matched quotes with adjacent text
+  in default wrapping.
+- [ ] Improve quote matching for straight single quotes, unbalanced nested
+  delimiters, and quotes next to bare URLs.
+- [x] Keep a separated sentence period with the preceding number while
+  preserving ambiguous numeric spacing.
+- [x] Keep punctuation with inline markup and emoji, including inverted marks
+  before links and commas after autolinks or closing HTML tags.
+- [x] Keep ellipses, fullwidth and Arabic sentence marks, and East Asian
+  delimiters with adjacent text. Preserve thin spaces before punctuation
+  across soft breaks.
+
 ## Later releases
 
 ### Check mode and pre-commit integration

@@ -17,6 +17,9 @@ struct ProsePunctuation {
     private static let closingMarks: [Unicode.Scalar: Spacing] = [
         ",": .remove, ".": .remove, "?": .remove, "!": .remove,
         ":": .preserve, ";": .preserve,
+        "…": .preserve, "。": .preserve, "，": .preserve, "、": .preserve,
+        "？": .preserve, "！": .preserve, "؟": .preserve, "،": .preserve,
+        "；": .preserve, "：": .preserve, "؛": .preserve,
     ]
     private static let invertedMarks: Set<Unicode.Scalar> = ["¿", "¡"]
     private static let delimiterPairs: [Unicode.Scalar: Set<Unicode.Scalar>] = [
@@ -24,11 +27,13 @@ struct ProsePunctuation {
         "\"": ["\""], "'": ["'"],
         "“": ["”"], "„": ["“", "”"], "‘": ["’"], "‚": ["‘", "’"],
         "«": ["»"], "»": ["«"], "‹": ["›"], "›": ["‹"],
+        "（": ["）"], "「": ["」"], "『": ["』"],
     ]
     private static let codeEnclosures: Set<Unicode.Scalar> = ["(", "{"]
     private static let trailingClosers: Set<Unicode.Scalar> = [
-        ")", "]", "}", "”", "’", "»", "›", "\"", "'",
+        ")", "]", "}", "”", "’", "»", "›", "\"", "'", "）", "」", "』",
     ]
+    private static let expressiveMarks: Set<Unicode.Scalar> = ["?", "!", "…", "？", "！", "؟"]
 
     private let text: NSString
     private let opaque: [Bool]
@@ -40,7 +45,7 @@ struct ProsePunctuation {
         self.text = text
         self.opaque = opaque
         self.repair = repair
-        if repair { matchDelimiters() }
+        matchDelimiters()
     }
 
     // A spacing rule joins the two tokens. Nil leaves a wrap opportunity.
@@ -53,28 +58,33 @@ struct ProsePunctuation {
         let first = proseCharacter(at: right)
         let last = proseCharacter(at: left)
 
-        if let first, let spacing = sentenceMarkSpacing(first, at: right, in: next),
-           canPrecedeSentenceMark(previous, mark: first, beforeEnd: NSMaxRange(next) < text.length) {
-            // Joining a query mark or period to a bare URL can change its target.
-            return previousEndsInBareURL ? .preserve : spacing
+        // Moving a literal backslash to the end of the line creates a hard break.
+        if last == "\\" { return .preserve }
+
+        if let first, let spacing = sentenceMarkSpacing(first, at: right, in: next) {
+            let word = text.substring(with: previous)
+            // Preserve ambiguous numeric spacing and keep punctuation outside bare URLs.
+            if previousEndsInBareURL || word.last?.isWhitespace == true
+                || (first == "." && NSMaxRange(next) < text.length && word.allSatisfy(\.isNumber)) {
+                return .preserve
+            }
+            return spacing
         }
-        if let last, Self.invertedMarks.contains(last),
-           first != nil || nextCodeEnd != nil {
-            return .remove
+        if let last, Self.invertedMarks.contains(last) {
+            return first != nil || nextCodeEnd != nil ? .remove : .preserve
         }
 
-        if let opener = closers[right], let mark = proseCharacter(at: opener),
+        if repair, let opener = closers[right], let mark = proseCharacter(at: opener),
            Self.codeEnclosures.contains(mark), previousEndsInCode {
             return .remove
         }
-        if let closer = openers[left], let mark = last,
+        if repair, let closer = openers[left], let mark = last,
            Self.codeEnclosures.contains(mark), let nextCodeEnd,
            firstNonSpace(after: nextCodeEnd) == closer {
             return .remove
         }
 
-        if openers[left] != nil || closers[right] != nil
-            || (repair && (last == "(" || first == ")")) {
+        if openers[left] != nil || closers[right] != nil || last == "(" || first == ")" {
             return .preserve
         }
         return nil
@@ -94,30 +104,24 @@ struct ProsePunctuation {
     }
 
     private func sentenceMarkSpacing(_ mark: Unicode.Scalar, at index: Int, in token: NSRange) -> Spacing? {
-        guard let spacing = Self.closingMarks[mark] else { return nil }
+        guard var spacing = Self.closingMarks[mark] else { return nil }
         var end = index + 1
-        if mark == "?" || mark == "!" {
-            while let character = proseCharacter(at: end), character == "?" || character == "!" {
+        if mark == ".", proseCharacter(at: end) == ".", proseCharacter(at: end + 1) == "." {
+            spacing = .preserve
+            while proseCharacter(at: end) == "." { end += 1 }
+        }
+        if Self.expressiveMarks.contains(mark) {
+            while let character = proseCharacter(at: end), Self.expressiveMarks.contains(character) {
                 end += 1
             }
         }
         if end == NSMaxRange(token) { return spacing }
 
         // A mark may be followed by closing punctuation, as in ?!” or .).
-        // A dot followed by a name, digit or another dot can be literal text.
+        // A dot followed by a name or digit can be literal text.
         return (end..<NSMaxRange(token)).allSatisfy { offset in
             proseCharacter(at: offset).map { Self.trailingClosers.contains($0) } ?? false
         } ? spacing : nil
-    }
-
-    private func canPrecedeSentenceMark(
-        _ previous: NSRange, mark: Unicode.Scalar, beforeEnd: Bool
-    ) -> Bool {
-        let word = text.substring(with: previous)
-        guard let last = word.last, !last.isWhitespace,
-              last.isLetter || last.isNumber || last.isPunctuation || last == "`" else { return false }
-        // A separated period after a number may be a list marker or decimal.
-        return mark != "." || !beforeEnd || !word.allSatisfy(\.isNumber)
     }
 
     private mutating func matchDelimiters() {

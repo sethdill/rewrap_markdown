@@ -177,8 +177,10 @@ private let tableDelimiter = RegexPattern(#"^ {0,3}\|?\s*:?-+:?\s*(\|\s*:?-+:?\s
 private let htmlBlockStart = RegexPattern(#"^ {0,3}</?[a-zA-Z][a-zA-Z0-9-]*(?:\s|/?>|$)"#)
 private let htmlCommentStart = RegexPattern(#"^ {0,3}<!--"#)
 private let htmlCommentEnd = RegexPattern(#"-->\s*$"#)
+private let htmlDeclarationStart = RegexPattern(#"^ {0,3}<(?:\?|![A-Za-z]|!\[CDATA\[)"#)
 private let gfmAlertMarker = RegexPattern(#"^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$"#)
-private let hardBreak = RegexPattern(#"(\\|  +)$"#)
+// Only an odd run of backslashes ends in an unescaped hard-break marker.
+private let hardBreak = RegexPattern(#"(?<!\\)(?:\\\\)*(\\)$| {2,}$"#)
 private let commitComment = RegexPattern(#"^[ \t]*#"#)
 private let commitTrailer = RegexPattern(#"^[A-Za-z0-9][A-Za-z0-9-]*[ \t]*[:=][ \t]+.+$"#)
 private func sourceLines(_ text: String) -> [(text: String, ending: String)] {
@@ -521,23 +523,64 @@ private func wrapTokens(_ tokens: [String], width: Int, column: Int) -> [String]
     var current: [String] = []
     var currentLength = 0
 
-    for token in tokens {
+    for token in keepMarkdownMarkersWithProse(tokens, column: column) {
         let tokenStart = column + currentLength + (current.isEmpty ? 0 : 1)
         let nextLength = endColumn(token, from: tokenStart) - column
         if !current.isEmpty, nextLength > width {
-            lines.append(current.joined(separator: " "))
-            current = [token]
-            currentLength = endColumn(token, from: column) - column
-        } else {
-            current.append(token)
-            currentLength = nextLength
+            let line = current.joined(separator: " ")
+            // Opening punctuation in prose can become a block if it stands alone.
+            if !lines.isEmpty || !startsWrappedBlock(line, column: column) {
+                lines.append(line)
+                current = [token]
+                currentLength = endColumn(token, from: column) - column
+                continue
+            }
         }
+        current.append(token)
+        currentLength = nextLength
     }
 
     if !current.isEmpty {
         lines.append(current.joined(separator: " "))
     }
     return lines.isEmpty ? [""] : lines
+}
+
+private func keepMarkdownMarkersWithProse(_ tokens: [String], column: Int) -> [String] {
+    guard !tokens.isEmpty else { return [] }
+    var groups: [String] = []
+    var start = 0
+
+    for index in 1...tokens.count {
+        if index < tokens.count, couldStartWrappedBlock(tokens, at: index, column: column) {
+            continue
+        }
+        groups.append(tokens[start..<index].joined(separator: " "))
+        start = index
+    }
+    return groups
+}
+
+private func couldStartWrappedBlock(_ tokens: [String], at index: Int, column: Int) -> Bool {
+    let token = tokens[index]
+    guard let initial = token.first,
+          initial.isNumber || "-+*#>[`~<=_|:".contains(initial) else {
+        return false
+    }
+    let next = index + 1 < tokens.count ? tokens[index + 1] : ""
+    let pair = token + " " + next
+    // Look ahead for list content and for spaced thematic breaks like "_ _ _".
+    return startsWrappedBlock(token, column: column)
+        || startsWrappedBlock(pair, column: column)
+        || (index + 2 < tokens.count && thematicBreak.matches(pair + " " + tokens[index + 2]))
+}
+
+private func startsWrappedBlock(_ line: String, column: Int) -> Bool {
+    startsNewBlock(line, column: column)
+        || setextH1.matches(line)
+        || setextH2.matches(line)
+        || tableDelimiter.matches(line)
+        || htmlDeclarationStart.matches(line)
 }
 
 private func processCommitMessageBody(_ lines: [String], width: Int, indent: RewrapMarkdown.IndentStyle, repair: Bool) -> [String] {
@@ -609,16 +652,16 @@ private func nestedWidth(_ width: Int, removing prefixLength: Int) -> Int {
     width == 0 ? 0 : max(1, width - prefixLength)
 }
 
-private let nonbreakingSpaces: Set<Character> = ["\u{00A0}", "\u{202F}"]
+private let paragraphBoundarySpaces: Set<Character> = ["\u{00A0}", "\u{2009}", "\u{202F}"]
 private let paragraphWhitespace = CharacterSet.whitespacesAndNewlines.subtracting(
-    CharacterSet(charactersIn: "\u{00A0}\u{202F}")
+    CharacterSet(charactersIn: "\u{00A0}\u{2009}\u{202F}")
 )
 
 private func joinParagraphLines(_ lines: [String]) -> String {
     var joined = ""
     for line in lines where !line.isEmpty {
         if let last = joined.last, let first = line.first,
-           !nonbreakingSpaces.contains(last), !nonbreakingSpaces.contains(first) {
+           !paragraphBoundarySpaces.contains(last), !paragraphBoundarySpaces.contains(first) {
             joined += " "
         }
         joined += line
@@ -632,10 +675,11 @@ private func wrapParagraphText(_ rawLines: [String], width: Int, column: Int, re
 
     for line in rawLines {
         let stripped = line.trimmingCharacters(in: paragraphWhitespace)
-        let withoutNewline = line
-        if let match = hardBreak.firstMatch(in: withoutNewline), !stripped.isEmpty {
+        if let match = hardBreak.firstMatch(in: line), !stripped.isEmpty {
             let breakStyle = match[1] == "\\" ? "\\" : "  "
-            let textPart = substring(withoutNewline, toUTF16Offset: match.range.location)
+            let textPart = breakStyle == "\\"
+                ? String(line.dropLast())
+                : substring(line, toUTF16Offset: match.range.location)
             buffer.append(textPart.trimmingCharacters(in: paragraphWhitespace))
             segments.append((joinParagraphLines(buffer), breakStyle))
             buffer.removeAll()
