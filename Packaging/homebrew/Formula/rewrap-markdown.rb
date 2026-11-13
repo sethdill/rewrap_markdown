@@ -1,9 +1,9 @@
 class RewrapMarkdown < Formula
   desc "Reflow Markdown prose while preserving its structure"
   homepage "https://github.com/sethdill/rewrap_markdown"
-  url "https://github.com/sethdill/rewrap_markdown/archive/edbe983f49e62535004e32bd2c1edefb0bd4dd7f.tar.gz"
-  version "0.3"
-  sha256 "7cd5a0f63efd62622d046f6ff4751e689bbcc39f45cdbdb34749c296581d13b9"
+  url "https://github.com/sethdill/rewrap_markdown/archive/d8a2bb66992c75c8cbb8fc36f6da55ae83cb53cd.tar.gz"
+  version "0.4"
+  sha256 "7e0509531c53bb8f88a7442f849bd880c7d87799a34f1dd29a8bdf034262f94b"
   license "Apache-2.0"
 
   depends_on xcode: ["15.0", :build]
