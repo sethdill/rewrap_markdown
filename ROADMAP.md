@@ -1,7 +1,7 @@
 # Roadmap
 
 Version [0.3](https://github.com/sethdill/rewrap_markdown/releases/tag/v0.3)
-is published. Later releases list planned work.
+was published on November 5, 2026. Later releases list planned work.
 
 ## 0.3
 
@@ -38,15 +38,51 @@ is published. Later releases list planned work.
 - [x] Pin the final v0.3 release commit and publish the formula in the
   [public tap](https://github.com/sethdill/homebrew-tap).
 - [x] Verify `brew install sethdill/tap/rewrap-markdown` on macOS and Linux.
+  [CI passed on both architectures](https://github.com/sethdill/homebrew-tap/actions/runs/42054876568).
 
 See the [completed publishing checklist](RELEASING.md#v03-publishing-checklist)
 and the [tap maintenance notes](Packaging/homebrew/README.md).
+
+## 0.4
+
+### Check mode and partial-file wrapping
+
+- [x] Add `--check` to both CLIs to report whether formatting would change the
+  input, for use in CI and scripts.
+- [x] Accept repeatable `--lines START:END` ranges in both CLIs. Rewrap prose
+  touched by those ranges and preserve protected blocks and bytes outside the
+  selected prose.
+
+### Punctuation repair
+
+- [x] Keep prose punctuation with its neighboring word or inline span in basic
+  wrapping and unwrapping, including repairs such as `` `code` , `` to
+  `` `code`, ``.
+- [x] Extend opt-in repair to matched prose braces and quote wrapping, with
+  shared Swift and Python regression cases.
+
+### Bugs
+
+- [x] Prevent wrap boundaries from turning prose into Markdown lists,
+  blockquotes, headings, thematic breaks, fences, tables, or HTML blocks.
+- [x] Prevent a literal backslash in prose from becoming a Markdown hard break.
+- [x] Keep spaced parentheses, braces, and matched quotes with adjacent text
+  in default wrapping.
+- [x] Improve quote matching for straight single quotes, unbalanced nested
+  delimiters, and quotes next to bare URLs.
+- [x] Keep a separated sentence period with the preceding number while
+  preserving ambiguous numeric spacing.
+- [x] Keep punctuation with inline markup and emoji, including inverted marks
+  before links and commas after autolinks or closing HTML tags.
+- [x] Keep ellipses, fullwidth and Arabic sentence marks, and East Asian
+  delimiters with adjacent text. Preserve thin spaces before punctuation
+  across soft breaks.
 
 ## Later releases
 
 ### Check mode and pre-commit integration
 
-- [ ] Add `--check` and `--diff` for CI and review workflows.
+- [ ] Add `--diff` for review workflows.
 - [ ] Accept multiple file arguments and add safe in-place editing with `-i`.
 - [ ] Add a hook definition for the pre-commit framework.
 
@@ -63,10 +99,7 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 
 ### Partial-file wrapping
 
-- [ ] Accept explicit line ranges and optionally limit changes to paragraphs
-  touched by a Git diff.
-- [ ] Keep unchanged regions byte-for-byte stable for agent and assistant
-  workflows.
+- [ ] Limit changes to paragraphs touched by a Git diff.
 
 ### Packaging
 

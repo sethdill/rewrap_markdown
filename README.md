@@ -7,6 +7,9 @@
 - [Markdown It Understands](#markdown-it-understands)
 - [Install](#install)
 - [Command Line](#command-line)
+  - [Check Formatting](#check-formatting)
+  - [Preview Formatting Changes](#preview-formatting-changes)
+  - [Rewrap Specific Lines](#rewrap-specific-lines)
 - [BBEdit](#bbedit)
 - [Other Editors](#other-editors)
 - [Development](#development)
@@ -92,7 +95,7 @@ installer below.
 
 The command-line tool supports macOS 12 or later and Linux. BBEdit integration
 and the `.pkg` installer require macOS; the integrations have been tested with
-BBEdit 15.5.5. Linux release binaries are introduced in 0.3.
+BBEdit 15.5.5. Linux release binaries are available starting with 0.3.
 
 ### macOS Installer
 
@@ -114,7 +117,7 @@ Each release includes a `.sha256` file. Set `VERSION` to the version you
 downloaded and run this in the directory containing both files:
 
 ```sh
-VERSION=0.3
+VERSION=0.4
 shasum -a 256 -c "rewrap-markdown-${VERSION}-unsigned.pkg.sha256"
 ```
 
@@ -133,7 +136,7 @@ Download the binary for your Mac from the
 Set `VERSION` to the version you downloaded:
 
 ```sh
-VERSION=0.3
+VERSION=0.4
 ARCH=$(uname -m)
 mkdir -p "$HOME/.local/bin"
 install -m 755 \
@@ -150,17 +153,17 @@ your shell path, add this to `~/.zprofile` when using Zsh or
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Linux Release Binary (0.3)
+### Linux Release Binary
 
 From the [releases page](https://github.com/sethdill/rewrap_markdown/releases),
-choose a release starting with 0.3 and download both
+choose v0.3 or later and download both
 `rewrap-markdown-VERSION-linux-x86_64` (Intel/AMD) or
 `rewrap-markdown-VERSION-linux-aarch64` (ARM64), and its `.sha256` file.
 
 In the directory containing the downloaded files:
 
 ```sh
-VERSION=0.3
+VERSION=0.4
 ARCH=$(uname -m)  # x86_64 or aarch64
 BINARY="rewrap-markdown-${VERSION}-linux-${ARCH}"
 sha256sum -c "${BINARY}.sha256"
@@ -253,6 +256,59 @@ Or rewrap text on the macOS clipboard:
 pbpaste | rewrap-markdown 72 | pbcopy
 ```
 
+### Check Formatting
+
+Use `--check` to test whether formatting would change a document.
+
+```sh
+rewrap-markdown --check 80 < draft.md
+python3 Reference/rewrap_markdown.py --check 80 < draft.md
+```
+
+Both CLIs compare the formatted UTF-8 bytes with the original stdin bytes
+and leave stdout empty. Exit status `0` means the bytes match, `1` means
+formatting would change them, and `2` indicates an argument or input error
+reported on stderr. The check uses the requested width and supports
+`--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`.
+
+### Preview Formatting Changes
+
+Before rewrapping a document you're editing, use `diff -u` to see which lines
+the formatter would change. This leaves `draft.md` untouched.
+
+```sh
+if preview=$(mktemp "${TMPDIR:-/tmp}/rewrap-preview.XXXXXX"); then
+    rewrap-markdown 80 < draft.md > "$preview" && diff -u draft.md "$preview"
+    rm -f "$preview"
+fi
+```
+
+Lines prefixed with `-` come from the original, and lines prefixed with `+`
+show the proposed replacement. No diff output means the files match.
+
+### Rewrap Specific Lines
+
+Use repeatable `--lines START:END` arguments to select lines from standard input.
+Line numbers are 1-based and inclusive. Every range uses the original input's
+line numbers, even if rewrapping an earlier block changes its length.
+
+```sh
+rewrap-markdown --lines 8:12 --lines 24:24 80 < draft.md > draft-wrapped.md
+rewrap-markdown --check --lines 8:12 80 < draft.md
+```
+
+A range that touches prose selects the whole paragraph or the prose belonging to
+the same list item, with its enclosing list and quote context. Nested list items
+can be selected independently. A range can reach across fenced or indented code
+and other protected blocks to select prose on either side. Protected blocks and
+all bytes outside the selected prose are preserved, including line endings,
+trailing spaces, and the presence or absence of a final newline.
+
+Both CLIs support width, `--unwrap`, `--repair`, and `--indent` with ranges.
+`--check` reports whether the selected formatting would change the input.
+Malformed, reversed, or out-of-bounds ranges exit with status `2` and a
+diagnostic on stderr. `--lines` is incompatible with `--commit`.
+
 ### Unwrap Markdown
 
 Join each paragraph and list item onto one line before pasting Markdown into a
@@ -264,6 +320,49 @@ rewrap-markdown --unwrap < draft.md > draft-unwrapped.md
 
 Width `0` is equivalent to `--unwrap`. Markdown structure, protected blocks,
 and intentional hard line breaks are preserved.
+
+### Prose Punctuation
+
+Both implementations join prose commas, periods, question marks, and
+exclamation marks to the preceding word or inline span in every wrap mode.
+Inverted question and exclamation marks join the following word. Colons and
+semicolons stay with the preceding text when wrapping, with their space
+preserved. Ellipses and supported non-ASCII sentence marks also stay with
+the preceding text and retain their spacing. Spaced parentheses, braces,
+and matched quotes stay with the adjacent text. Longer passages can wrap
+inside those delimiters. An inseparable group may exceed the requested
+width. Wrapping also keeps inline markers with preceding prose when starting
+a new line with them could create a Markdown block. Nonbreaking spaces, thin
+spaces before punctuation, and hard line breaks are preserved.
+
+### Repair Spacing Around Inline Code (Opt-in)
+
+Use `rewrap-markdown --repair 70` to remove spacing between an inline code span
+and a matched closing parenthesis. For example, ``(such as `code` )`` becomes
+``(such as `code`)``. When the span is the entire parenthetical, repair also
+removes spacing after the opener, so ``( `code` )`` becomes ``(`code`)``.
+These repairs apply to spaces, tabs, and spacing joined from soft line breaks.
+`( ordinary words )` and ``( `code` plus prose )`` retain their spacing.
+
+Code contents, escapes, links, URLs, and protected blocks are opaque to repair.
+Intentional hard breaks remain boundaries.
+
+`--repair` works with `--unwrap` and width `0` (repair before joining), all
+`--indent=preserve|tabs|spaces` styles, and `--commit` (body only; subject,
+comments, and trailers stay unchanged). `--repair` also applies the code
+spacing rule to matched prose braces. Interior quote spacing is preserved.
+Square brackets remain protected as potential Markdown references, and
+recognized template delimiters are treated as syntax.
+
+### List Indentation
+
+Rewrapping preserves the indentation style of each list item by default.
+Tabbed lists and sublists can coexist with space-indented lists. Tabs advance
+to the next four-column stop for Markdown parsing and wrap measurement.
+
+Use `--indent=tabs` or `--indent=spaces` to convert list indentation
+explicitly. `--indent=preserve` selects the default behavior. These options
+also work with `--unwrap` and `--commit`.
 
 ### Commit Messages
 
@@ -313,6 +412,10 @@ width of 70 by default.
 
 To change the preferred width after installing the filter, hold the option key
 when you choose the filter, then edit the `WRAP_WIDTH` variable.
+
+BBEdit's Markdown-aware Hard Wrap and text filters measure width in UTF-16
+code units to match BBEdit's column readout. To use the same measurement from
+the command line, pass `--width-unit=utf16`.
 
 ### Markdown-Aware Hard Wrap
 
@@ -385,6 +488,11 @@ author. The test suite runs shared compatibility cases against both versions.
 
 The Python script remains available at `Reference/rewrap_markdown.py` for
 comparison and experimentation; it is no longer the main installation path.
+
+On macOS, running `--check` with a directory redirected to stdin (for example,
+using `< .`) exits with status `2` in the Swift CLI and status `1` in the
+Python reference CLI. CPython rejects directory input during startup, before
+the reference script can handle the error.
 
 ## License
 

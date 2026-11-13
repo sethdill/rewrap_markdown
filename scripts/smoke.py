@@ -21,6 +21,85 @@ def check(arguments, source, expected):
     assert not result.stderr, result.stderr
 
 
+def check_status(arguments, source, status):
+    result = subprocess.run(COMMAND + ['--check'] + arguments, input=source,
+                            capture_output=True, env=ENV)
+    assert result.returncode == status, (arguments, result.returncode, status, result.stderr)
+    assert result.stdout == b'', (arguments, result.stdout)
+    assert bool(result.stderr) == (status == 2), (arguments, result.stderr)
+
+
+def check_range(arguments, source, expected, status=0, diagnostic=b''):
+    result = subprocess.run(COMMAND + arguments, input=source, capture_output=True, env=ENV)
+    assert result.returncode == status, (arguments, result.returncode, result.stderr)
+    assert result.stdout == expected, (arguments, result.stdout, expected)
+    if diagnostic:
+        assert diagnostic in result.stderr, (arguments, result.stderr)
+    else:
+        assert not result.stderr, (arguments, result.stderr)
+
+
+paragraphs = b'First paragraph\nis split.\n\nSecond paragraph\nis split.\n'
+unicode_prose = 'The draft is ready 🎉 ! See <https://example.com> , then continue.\n'
+check(['48'], unicode_prose, 'The draft is ready 🎉! See <https://example.com>,\nthen continue.\n')
+check(['--width-unit=utf16', '48'], unicode_prose,
+      'The draft is ready 🎉! See\n<https://example.com>, then continue.\n')
+check(['--width-unit=utf16', '--commit', '4'], 'Subject\n\nae\u0301 b\n', 'Subject\n\nae\u0301\nb\n')
+check_range(['--width-unit=utf16', '--lines', '1:1', '4'],
+            'a界 b\n\nae\u0301 b\n'.encode(), 'a界 b\n\nae\u0301 b\n'.encode())
+check_range(['--width-unit=utf16', '--lines', '3:3', '4'],
+            'a界 b\n\nae\u0301 b\n'.encode(), 'a界 b\n\nae\u0301\nb\n'.encode())
+check_range(['--width-unit=unknown'], b'', status=2, expected=b'',
+            diagnostic=b'Expected --width-unit=utf16.\n')
+check_range(['--lines', '2:2', '--unwrap'], paragraphs,
+            b'First paragraph is split.\n\nSecond paragraph\nis split.\n')
+check_range(['--lines', '5:5', '--lines', '1:2', '--lines', '2:4', '0'], paragraphs,
+            b'First paragraph is split.\n\nSecond paragraph is split.\n')
+check_range(['--lines', '1:1', '10'], b'One two three four',
+            b'One two\nthree four')
+
+quoted_list = (b'> - Parent stays  \n>   as written.\n>   - Child line\n'
+               b'>     continues here.\n>   - Another child\n>     stays split.\n')
+check_range(['--lines', '4:4', '--unwrap'], quoted_list,
+            b'> - Parent stays  \n>   as written.\n>   - Child line continues here.\n'
+            b'>   - Another child\n>     stays split.\n')
+loose_item = (b'- First part\n  stays prose.\n  \n  ```\n  code  \n  ```\n'
+              b'  \n  Second part\n  is also prose.\n')
+check_range(['--lines', '2:2', '--unwrap'], loose_item,
+            b'- First part stays prose.\n  \n  ```\n  code  \n  ```\n  \n  Second part is also prose.\n')
+check_range(['--lines', '5:5', '--unwrap'], loose_item, loose_item)
+check_range(['--lines', '2:2', '--repair', '--indent=tabs', '--unwrap'],
+            b'* First (`code` )\n  more words.\n* Leave unchanged.\n',
+            b'*\tFirst (`code`) more words.\n* Leave unchanged.\n')
+check_range(['--lines', '1:1', '--indent=tabs', '14'],
+            b'- Parent prose gets wrapped.\n  - Untouched child.\n',
+            b'- Parent prose\n  gets\n  wrapped.\n  - Untouched child.\n')
+
+fenced = b'Before\nthe fence.\n```md\n- keep  spaces\n```  \nAfter\nthe fence.\n'
+check_range(['--lines', '4:4', '--unwrap'], fenced, fenced)
+check_range(['--lines', '2:6', '--unwrap'], fenced,
+            b'Before the fence.\n```md\n- keep  spaces\n```  \nAfter the fence.\n')
+indented = b'    indented  \r\n    code \r\n\r\nAfter\r\nthe code.'
+check_range(['--lines', '2:2', '--unwrap'], indented, indented)
+mixed_endings = b'Cafe\xcc\x81  \r\n\t \r\nSelected\r\nprose.\r\n \nLast line  '
+check_range(['--lines', '4:4', '--unwrap'], mixed_endings,
+            b'Cafe\xcc\x81  \r\n\t \r\nSelected prose.\r\n \nLast line  ')
+check_range(['--lines', '2:2', '--unwrap'], b'First\rOnly line selected.\r',
+            b'First Only line selected.\r')
+
+check_status(['--lines', '2:2', '--unwrap'], paragraphs, 1)
+check_status(['--lines', '4:4', '--unwrap'], fenced, 0)
+check_status(['--lines', '5:5', '--unwrap'], b'First part\nis split.\r\n\r\n# Header  \r\nLast line.', 0)
+for arguments in (['--lines'], ['--lines', '1'], ['--lines', '0:1'],
+                  ['--lines', '2:1'], ['--lines', '1:2:3'], ['--lines', '+1:2'],
+                  ['--lines', '1: 2'], ['--lines=1:2']):
+    check_range(arguments, paragraphs, b'', 2, b'--lines START:END')
+check_range(['--lines', '1:6'], paragraphs, b'', 2, b'out of bounds')
+check_range(['--lines', '1:1'], b'', b'', 2, b'out of bounds')
+check_range(['--lines', '1:1', '--check'], b'\xff', b'', 2, b'UTF-8')
+check_range(['--lines', '1:1', '--commit'], paragraphs, b'', 2, b'cannot be used with --commit')
+
+
 check(['--version'], '', 'rewrap-markdown ' + (ROOT / 'VERSION').read_text().strip() + '\n')
 check(['16'], 'These words should wrap across lines.\n',
       'These words\nshould wrap\nacross lines.\n')
@@ -28,6 +107,76 @@ source = '- Café and naïve\n  prose with `inline code`.\n\n```\nkeep   spaces\
 unwrapped = '- Café and naïve prose with `inline code`.\n\n```\nkeep   spaces\n```\n'
 check(['--unwrap'], source, unwrapped)
 check(['0'], source, unwrapped)
+release_note = (
+    '* [508391] Fixed a JavaScript syntax coloring bug in which a regular\n'
+    "expression inside a template literal's `${...}` expression (such as\n"
+    r'`/\//g` ) could cause everything after the template literal to be' '\n'
+    'colored as part of it. This also affected TypeScript and ActionScript,\n'
+    'which use the same language module.\n'
+)
+table = '| A | B |\n| --- | --- |\n| 1 | 2 |\n'
+for mode in ('--unwrap', '0'):
+    check([mode], release_note, ' '.join(release_note.splitlines()) + '\n')
+    check(['--repair', mode], release_note,
+          ' '.join(release_note.splitlines()).replace('` )', '`)') + '\n')
+    check([mode], '1. First line\n continuation\n   more text.\n2. Next item.\n',
+          '1. First line continuation more text.\n2. Next item.\n')
+    check([mode], '- ```\n  keep   spaces\noutside the fence\nand the list.\n',
+          '- ```\n  keep   spaces\noutside the fence and the list.\n')
+    check([mode], '- First item.\n\nOutside\nthe list.\n',
+          '- First item.\n\nOutside the list.\n')
+    check([mode], '- Outer item\n  - Inner item\ncontinues here.\n',
+          '- Outer item\n  - Inner item continues here.\n')
+    check([mode], '- First item.\n' + table, '- First item.\n' + table)
+check(['17'], '- First line\ncontinues here.\n',
+      '- First line\n  continues here.\n')
+
+tabbed_list = '*\tParent words go here.\n\t*\tChild words go here.\n'
+wrapped_tabs = '*\tParent words go\n\there.\n\t*\tChild words\n\t\tgo here.\n'
+for indent_args in ([], ['--indent=preserve']):
+    check(indent_args + ['20'], tabbed_list, wrapped_tabs)
+    check(indent_args + ['--unwrap'], wrapped_tabs, tabbed_list)
+check(['--indent=spaces', '20'], tabbed_list, wrapped_tabs.expandtabs(4))
+check(['--indent=tabs', '20'], '* Parent words go here.\n  * Child words go here.\n', wrapped_tabs)
+check(['--indent=tabs', '--commit', '20'],
+      'Subject\n\n* Parent words go here.\n  * Child words go here.\n',
+      'Subject\n\n' + wrapped_tabs)
+check(['20'], '*   Parent words go here.\n\t *\tChild words go here.\n',
+      '*   Parent words go\n\there.\n\t *\tChild words\n\t\tgo here.\n')
+check(['--indent=tabs', '--unwrap'], '*     code  stays\n', '*     code  stays\n')
+check(['--unwrap'], '*\t\tcode  stays\n', '*\t\tcode  stays\n')
+check(['--unwrap'], '*\t\n*\tSecond item.\n', '*\t\n*\tSecond item.\n')
+check(['--indent=tabs', '--unwrap'], '* Text.\n\n  \t  code\tstays\n',
+      '*\tText.\n\n\t    code\tstays\n')
+check(['--indent=spaces', '--unwrap'], '*\tText.\n\t```\n\tkeep\tspaces\n\t```\n',
+      '*   Text.\n    ```\n    keep\tspaces\n    ```\n')
+check(['0'], 'Run `go`\n, then record the result.\n',
+      'Run `go`, then record the result.\n')
+# Repair is opt-in and composes with the existing CLI modes.
+repair_source = 'Before ( `code` ) after.\n'
+check(['0'], repair_source, repair_source)
+check(['--repair', '10'], repair_source, 'Before\n(`code`)\nafter.\n')
+check(['--repair', '18'], 'Before ( several\nordinary words\n) after.\n',
+      'Before ( several\nordinary words )\nafter.\n')
+for mode in ('--unwrap', '0'):
+    check(['--repair', mode], repair_source, 'Before (`code`) after.\n')
+    for style in ('preserve', 'tabs', 'spaces'):
+        body = '*\t( `code` )\n'
+        expected_body = '*   (`code`)\n' if style == 'spaces' else '*\t(`code`)\n'
+        prefix = 'Subject ( `subject` )\n\n'
+        suffix = '\n# ( `comment` )\n\nSigned-off-by: ( `trailer` )\n'
+        check(['--repair', '--commit', '--indent=' + style, mode],
+              prefix + body + suffix, prefix + expected_body + suffix)
+protected_repair = '```\n( `code` )\n```\n\n    ( `code` )\n'
+check(['--repair', '10'], protected_repair, protected_repair)
+check(['--repair', '0'], '( `` a ` b  `` ) [ `code` ]\n',
+      '(`` a ` b  ``) [ `code` ]\n')
+
+invalid_indent = subprocess.run(COMMAND + ['--indent=invalid'], input='', text=True,
+                                capture_output=True, env=ENV)
+assert invalid_indent.returncode == 2 and not invalid_indent.stdout
+assert '--indent=preserve' in invalid_indent.stderr
+
 commit = ('Subject stays exactly as written\n\nThese words should wrap across lines.\n\n'
           '# Keep this comment exactly as written.\n\nSigned-off-by: Tester <test@example.com>\n')
 wrapped = commit.replace('These words should wrap across lines.',
@@ -36,6 +185,28 @@ check(['--commit', '16'], commit, wrapped)
 check(['--commit', '--unwrap'], wrapped, commit)
 check(['--commit', '0'], wrapped, commit)
 check(['--commit'], commit, commit)
+
+check_status(['16'], b'These words\nshould wrap\nacross lines.\n', 0)
+check_status(['16'], b'These words should wrap across lines.\n', 1)
+check_status([], b'', 0)
+check_status([], b'Hello.\r\n', 1)
+for mode in ('--unwrap', '0'):
+    check_status([mode], unwrapped.encode('utf-8'), 0)
+    check_status([mode], source.encode('utf-8'), 1)
+check_status(['0'], b'( `code` )\n', 0)
+check_status(['--repair', '0'], b'( `code` )\n', 1)
+check_status(['--commit', '16'], wrapped.encode('utf-8'), 0)
+check_status(['--commit', '16'], commit.encode('utf-8'), 1)
+check_status(['--indent=spaces', '20'], wrapped_tabs.expandtabs(4).encode('utf-8'), 0)
+check_status(['--indent=spaces', '20'], wrapped_tabs.encode('utf-8'), 1)
+for arguments in (['--unknown'], ['wide'], ['16', '20'], ['--indent=invalid']):
+    check_status(arguments, b'', 2)
+check_status([], b'\xff', 2)
+with open(os.devnull, 'wb') as write_only:
+    read_error = subprocess.run(COMMAND + ['--check'], stdin=write_only,
+                                capture_output=True, env=ENV)
+assert read_error.returncode == 2 and not read_error.stdout, read_error
+assert b'Could not read standard input' in read_error.stderr
 
 # Invoke the installed hook through Git itself, including its failure path.
 with tempfile.TemporaryDirectory(prefix='rewrap smoke ') as directory:
