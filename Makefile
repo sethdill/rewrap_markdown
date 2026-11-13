@@ -166,9 +166,9 @@ install: require-macos install-cli
 		printf '%s\n' '# Edit this value to use a different BBEdit wrapping width, such as 80 or 120.'; \
 		printf '%s\n' 'WRAP_WIDTH=$(FILTER_WIDTH)'; \
 		printf '%s\n' 'if [ "$$#" -eq 0 ]; then'; \
-		printf '%s\n' '	exec "$(INSTALLED_BINARY)" "$$WRAP_WIDTH"'; \
+		printf '%s\n' '	exec "$(INSTALLED_BINARY)" --width-unit=utf16 "$$WRAP_WIDTH"'; \
 		printf '%s\n' 'else'; \
-		printf '%s\n' '	exec "$(INSTALLED_BINARY)" "$$@"'; \
+		printf '%s\n' '	exec "$(INSTALLED_BINARY)" --width-unit=utf16 "$$@"'; \
 		printf '%s\n' 'fi'; \
 	} > "$(INSTALLED_FILTER)"
 	chmod +x "$(INSTALLED_FILTER)"

@@ -34,8 +34,8 @@ public enum RewrapMarkdown {
         rewrap(text, width: width, indent: .preserve)
     }
 
-    public static func rewrap(_ text: String, width: Int, indent: IndentStyle = .preserve, repair: Bool = false) -> String {
-        rewrapDocument(text, width: normalizedWidth(width), indent: indent, repair: repair)
+    public static func rewrap(_ text: String, width: Int, indent: IndentStyle = .preserve, repair: Bool = false, utf16Width: Bool = false) -> String {
+        rewrapDocument(text, width: normalizedWidth(width), indent: indent, repair: repair, utf16Width: utf16Width)
     }
 
     public struct LineRange {
@@ -64,7 +64,7 @@ public enum RewrapMarkdown {
 
     public static func rewrap(
         _ text: String, lines ranges: [LineRange], width: Int,
-        indent: IndentStyle = .preserve, repair: Bool = false
+        indent: IndentStyle = .preserve, repair: Bool = false, utf16Width: Bool = false
     ) throws -> String {
         let source = sourceLines(text)
         for range in ranges where range.end > source.count {
@@ -72,7 +72,7 @@ public enum RewrapMarkdown {
         }
 
         var edits: [ProseEdit] = []
-        let context = IndentContext(style: indent, repair: repair)
+        let context = IndentContext(style: indent, repair: repair, utf16Width: utf16Width)
         _ = processBlock(source.map(\.text), width: normalizedWidth(width),
                          context: context, lazyLines: [], collect: { edits.append($0) })
 
@@ -120,7 +120,7 @@ public enum RewrapMarkdown {
         _ text: String,
         width: Int = defaultCommitMessageWidth,
         indent: IndentStyle = .preserve,
-        repair: Bool = false
+        repair: Bool = false, utf16Width: Bool = false
     ) -> String {
         let hadTrailingNewline = text.hasSuffix("\n")
         var lines = text.components(separatedBy: "\n")
@@ -135,7 +135,7 @@ public enum RewrapMarkdown {
         let body = processCommitMessageBody(
             Array(lines.dropFirst()),
             width: normalizedWidth(width),
-            indent: indent, repair: repair
+            indent: indent, repair: repair, utf16Width: utf16Width
         )
         var result = ([subject] + body).joined(separator: "\n")
         if hadTrailingNewline {
@@ -149,14 +149,14 @@ private func normalizedWidth(_ width: Int) -> Int {
     width == 0 ? 0 : max(1, width)
 }
 
-private func rewrapDocument(_ text: String, width: Int, indent: RewrapMarkdown.IndentStyle, repair: Bool) -> String {
+private func rewrapDocument(_ text: String, width: Int, indent: RewrapMarkdown.IndentStyle, repair: Bool, utf16Width: Bool) -> String {
     let hadTrailingNewline = text.hasSuffix("\n")
     var lines = text.components(separatedBy: "\n")
     if hadTrailingNewline, lines.last == "" {
         lines.removeLast()
     }
 
-    var result = processBlock(lines, width: width, indent: indent, repair: repair).joined(separator: "\n")
+    var result = processBlock(lines, width: width, indent: indent, repair: repair, utf16Width: utf16Width).joined(separator: "\n")
     if hadTrailingNewline {
         result += "\n"
     }
@@ -219,16 +219,17 @@ private struct IndentContext {
     var input = 0
     var output = 0
     var repair = false
+    var utf16Width = false
 
     var tabStopsShift: Bool { input % 4 != output % 4 }
 
     func nested(input: Int, output: Int) -> Self {
-        Self(style: style, input: self.input + input, output: self.output + output, repair: repair)
+        Self(style: style, input: self.input + input, output: self.output + output, repair: repair, utf16Width: utf16Width)
     }
 }
 
-private func processBlock(_ lines: [String], width: Int, indent: RewrapMarkdown.IndentStyle, repair: Bool) -> [String] {
-    processBlock(lines, width: width, context: IndentContext(style: indent, repair: repair), lazyLines: []).rendered
+private func processBlock(_ lines: [String], width: Int, indent: RewrapMarkdown.IndentStyle, repair: Bool, utf16Width: Bool) -> [String] {
+    processBlock(lines, width: width, context: IndentContext(style: indent, repair: repair, utf16Width: utf16Width), lazyLines: []).rendered
 }
 
 // A line missing list indentation can extend a paragraph, but cannot start
@@ -426,10 +427,10 @@ private func processBlock(
         if let collect {
             let span = start..<i
             collect(ProseEdit(span: span) { width, column in
-                wrapParagraphText(paragraph, width: width, column: column, repair: context.repair)
+                wrapParagraphText(paragraph, width: width, column: column, repair: context.repair, utf16Width: context.utf16Width)
             })
         } else {
-            output.append(contentsOf: wrapParagraphText(paragraph, width: width, column: context.output, repair: context.repair))
+            output.append(contentsOf: wrapParagraphText(paragraph, width: width, column: context.output, repair: context.repair, utf16Width: context.utf16Width))
         }
     }
 
@@ -481,7 +482,8 @@ private func tokenizeInline(_ source: String, repair: Bool) -> [String] {
         let end = NSMaxRange(atom.range)
         appendWords(from: cursor, to: start)
         append(atom.range)
-        for index in start..<end { opaque[index] = true }
+        let opaqueEnd = atom[2].isEmpty ? end : ProsePunctuation.bareURLQuoteStart(in: source, range: atom.range)
+        for index in start..<opaqueEnd { opaque[index] = true }
         if !atom[1].isEmpty {
             codeStarts[start] = end
             codeEnds.insert(end)
@@ -514,7 +516,7 @@ private func tokenizeInline(_ source: String, repair: Bool) -> [String] {
     return tokens
 }
 
-private func wrapTokens(_ tokens: [String], width: Int, column: Int) -> [String] {
+private func wrapTokens(_ tokens: [String], width: Int, column: Int, utf16Width: Bool) -> [String] {
     if width == 0 {
         return [tokens.joined(separator: " ")]
     }
@@ -525,14 +527,14 @@ private func wrapTokens(_ tokens: [String], width: Int, column: Int) -> [String]
 
     for token in keepMarkdownMarkersWithProse(tokens, column: column) {
         let tokenStart = column + currentLength + (current.isEmpty ? 0 : 1)
-        let nextLength = endColumn(token, from: tokenStart) - column
+        let nextLength = endColumn(token, from: tokenStart, utf16Width: utf16Width) - column
         if !current.isEmpty, nextLength > width {
             let line = current.joined(separator: " ")
             // Opening punctuation in prose can become a block if it stands alone.
             if !lines.isEmpty || !startsWrappedBlock(line, column: column) {
                 lines.append(line)
                 current = [token]
-                currentLength = endColumn(token, from: column) - column
+                currentLength = endColumn(token, from: column, utf16Width: utf16Width) - column
                 continue
             }
         }
@@ -583,7 +585,7 @@ private func startsWrappedBlock(_ line: String, column: Int) -> Bool {
         || htmlDeclarationStart.matches(line)
 }
 
-private func processCommitMessageBody(_ lines: [String], width: Int, indent: RewrapMarkdown.IndentStyle, repair: Bool) -> [String] {
+private func processCommitMessageBody(_ lines: [String], width: Int, indent: RewrapMarkdown.IndentStyle, repair: Bool, utf16Width: Bool) -> [String] {
     let trailerStart = commitTrailerBlockStart(in: lines)
     let bodyEnd = trailerStart ?? lines.count
     var output: [String] = []
@@ -593,7 +595,7 @@ private func processCommitMessageBody(_ lines: [String], width: Int, indent: Rew
         guard !pending.isEmpty else {
             return
         }
-        output.append(contentsOf: processBlock(pending, width: width, indent: indent, repair: repair))
+        output.append(contentsOf: processBlock(pending, width: width, indent: indent, repair: repair, utf16Width: utf16Width))
         pending.removeAll()
     }
 
@@ -669,7 +671,7 @@ private func joinParagraphLines(_ lines: [String]) -> String {
     return joined
 }
 
-private func wrapParagraphText(_ rawLines: [String], width: Int, column: Int, repair: Bool) -> [String] {
+private func wrapParagraphText(_ rawLines: [String], width: Int, column: Int, repair: Bool, utf16Width: Bool) -> [String] {
     var segments: [(text: String, breakStyle: String?)] = []
     var buffer: [String] = []
 
@@ -695,7 +697,7 @@ private func wrapParagraphText(_ rawLines: [String], width: Int, column: Int, re
     var output: [String] = []
     for segment in segments {
         let tokens = tokenizeInline(segment.text, repair: repair)
-        var wrapped = tokens.isEmpty ? [""] : wrapTokens(tokens, width: width, column: column)
+        var wrapped = tokens.isEmpty ? [""] : wrapTokens(tokens, width: width, column: column, utf16Width: utf16Width)
         if let breakStyle = segment.breakStyle, !wrapped.isEmpty {
             wrapped[wrapped.count - 1] += breakStyle
         }
@@ -839,9 +841,10 @@ private func renderHanging(
     }
 }
 
-private func endColumn<S: StringProtocol>(_ text: S, from start: Int) -> Int {
+private func endColumn<S: StringProtocol>(_ text: S, from start: Int, utf16Width: Bool = false) -> Int {
     text.reduce(start) { column, character in
-        column + (character == "\t" ? 4 - column % 4 : 1)
+        if character == "\t" { return column + 4 - column % 4 }
+        return column + (utf16Width ? character.utf16.count : 1)
     }
 }
 

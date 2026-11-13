@@ -60,7 +60,7 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 - [x] Prevent a literal backslash in prose from becoming a Markdown hard break.
 - [x] Keep spaced parentheses, braces, and matched quotes with adjacent text
   in default wrapping.
-- [ ] Improve quote matching for straight single quotes, unbalanced nested
+- [x] Improve quote matching for straight single quotes, unbalanced nested
   delimiters, and quotes next to bare URLs.
 - [x] Keep a separated sentence period with the preceding number while
   preserving ambiguous numeric spacing.

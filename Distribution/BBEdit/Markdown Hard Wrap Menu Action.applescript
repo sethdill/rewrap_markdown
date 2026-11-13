@@ -143,7 +143,7 @@ on rewrapMarkdown(sourceText, wrapWidth)
 
 	try
 		my writeUTF8Text(sourceText, inputPath)
-		do shell script quoted form of executablePath & space & (wrapWidth as text) & " < " & quoted form of inputPath & " > " & quoted form of outputPath
+		do shell script quoted form of executablePath & " --width-unit=utf16 " & (wrapWidth as text) & " < " & quoted form of inputPath & " > " & quoted form of outputPath
 		set wrappedText to my readUTF8Text(outputPath)
 		do shell script "rm -rf " & quoted form of tempDirectory
 		return wrappedText

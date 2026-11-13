@@ -34,6 +34,14 @@ struct ProsePunctuation {
         ")", "]", "}", "”", "’", "»", "›", "\"", "'", "）", "」", "』",
     ]
     private static let expressiveMarks: Set<Unicode.Scalar> = ["?", "!", "…", "？", "！", "؟"]
+    private static let openingQuotes: Set<Unicode.Scalar> = ["“", "„", "‘", "‚"]
+    private static let closingQuotes: Set<Unicode.Scalar> = ["”", "’"]
+    private static let urlQuoteSuffix = try! NSRegularExpression(pattern: #"["'”’»›]+[.,!?;:]*$"#)
+
+    // Expose trailing quotes for matching while keeping the entire URL token intact.
+    static func bareURLQuoteStart(in text: String, range: NSRange) -> Int {
+        urlQuoteSuffix.firstMatch(in: text, range: range)?.range.location ?? NSMaxRange(range)
+    }
 
     private let text: NSString
     private let opaque: [Bool]
@@ -87,6 +95,11 @@ struct ProsePunctuation {
         if openers[left] != nil || closers[right] != nil || last == "(" || first == ")" {
             return .preserve
         }
+        // Directional quotes still face their text when another delimiter is unmatched.
+        if let last, Self.openingQuotes.contains(last), closers[left] == nil { return .preserve }
+        if let first, Self.closingQuotes.contains(first), !isWordCharacter(at: right + 1) {
+            return .preserve
+        }
         return nil
     }
 
@@ -129,32 +142,25 @@ struct ProsePunctuation {
         for index in 0..<text.length {
             guard let mark = proseCharacter(at: index) else { continue }
             let straightQuote = mark == "\"" || mark == "'"
-            if (mark == "’" || mark == "'"), isAlphanumeric(at: index - 1),
-               isAlphanumeric(at: index + 1) {
+            if (mark == "’" || mark == "'"), isWordCharacter(at: index - 1),
+               isWordCharacter(at: index + 1) {
                 continue
             }
             if let opener = stack.last, opener.endings.contains(mark),
-               !straightQuote || !isAlphanumeric(at: index + 1) {
+               !straightQuote || !isWordCharacter(at: index + 1) {
                 stack.removeLast()
                 openers[opener.offset] = index
                 closers[index] = opener.offset
             } else if let endings = Self.delimiterPairs[mark],
-                      !straightQuote || canOpenStraightQuote(mark, at: index) {
+                      !straightQuote || !isWordCharacter(at: index - 1) {
                 stack.append((index, endings))
             }
         }
     }
 
-    private func isAlphanumeric(at index: Int) -> Bool {
+    private func isWordCharacter(at index: Int) -> Bool {
         guard index >= 0, index < text.length,
               let character = Unicode.Scalar(text.character(at: index)) else { return false }
-        return CharacterSet.alphanumerics.contains(character)
-    }
-
-    private func canOpenStraightQuote(_ mark: Unicode.Scalar, at index: Int) -> Bool {
-        if isAlphanumeric(at: index - 1) { return false }
-        // A word-initial apostrophe can also signal an omission, as in 'tis.
-        // For a straight single quote, require a visibly separated opener.
-        return mark != "'" || proseCharacter(at: index + 1) == " "
+        return CharacterSet.alphanumerics.contains(character) || CharacterSet.nonBaseCharacters.contains(character)
     }
 }

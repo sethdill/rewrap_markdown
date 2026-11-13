@@ -24,9 +24,9 @@ for candidate in \
 do
 	if [ -n "$candidate" ] && [ -x "$candidate" ]; then
 		if [ "$#" -eq 0 ]; then
-			exec "$candidate" "$WRAP_WIDTH"
+			exec "$candidate" --width-unit=utf16 "$WRAP_WIDTH"
 		else
-			exec "$candidate" "$@"
+			exec "$candidate" --width-unit=utf16 "$@"
 		fi
 	fi
 done

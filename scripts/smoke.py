@@ -40,6 +40,17 @@ def check_range(arguments, source, expected, status=0, diagnostic=b''):
 
 
 paragraphs = b'First paragraph\nis split.\n\nSecond paragraph\nis split.\n'
+unicode_prose = 'The draft is ready 🎉 ! See <https://example.com> , then continue.\n'
+check(['48'], unicode_prose, 'The draft is ready 🎉! See <https://example.com>,\nthen continue.\n')
+check(['--width-unit=utf16', '48'], unicode_prose,
+      'The draft is ready 🎉! See\n<https://example.com>, then continue.\n')
+check(['--width-unit=utf16', '--commit', '4'], 'Subject\n\nae\u0301 b\n', 'Subject\n\nae\u0301\nb\n')
+check_range(['--width-unit=utf16', '--lines', '1:1', '4'],
+            'a界 b\n\nae\u0301 b\n'.encode(), 'a界 b\n\nae\u0301 b\n'.encode())
+check_range(['--width-unit=utf16', '--lines', '3:3', '4'],
+            'a界 b\n\nae\u0301 b\n'.encode(), 'a界 b\n\nae\u0301\nb\n'.encode())
+check_range(['--width-unit=unknown'], b'', status=2, expected=b'',
+            diagnostic=b'Expected --width-unit=utf16.\n')
 check_range(['--lines', '2:2', '--unwrap'], paragraphs,
             b'First paragraph is split.\n\nSecond paragraph\nis split.\n')
 check_range(['--lines', '5:5', '--lines', '1:2', '--lines', '2:4', '0'], paragraphs,

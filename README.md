@@ -395,6 +395,10 @@ width of 70 by default.
 To change the preferred width after installing the filter, hold the option key
 when you choose the filter, then edit the `WRAP_WIDTH` variable.
 
+BBEdit's Markdown-aware Hard Wrap and text filters measure width in UTF-16
+code units to match BBEdit's column readout. To use the same measurement from
+the command line, pass `--width-unit=utf16`.
+
 ### Markdown-Aware Hard Wrap
 
 The menu attachment takes over **Text > Hard Wrap…** only for Markdown

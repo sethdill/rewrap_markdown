@@ -6,7 +6,7 @@ import RewrapMarkdownCore
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 let usage = """
-Usage: rewrap-markdown [--check] [--lines START:END]... [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
+Usage: rewrap-markdown [--check] [--lines START:END]... [--width-unit=utf16] [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
 
 Read Markdown from standard input and write the transformed text to standard output.
 
@@ -14,6 +14,7 @@ Read Markdown from standard input and write the transformed text to standard out
             Exit 0 if unchanged, 1 if different, or 2 for argument or input errors.
   --lines   Rewrap blocks touching inclusive, 1-based input lines. Repeatable.
             Incompatible with --commit.
+  --width-unit=utf16  Measure wrap width in UTF-16 code units.
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
   --repair  Fix spacing around inline code enclosed in parentheses or braces.
@@ -42,6 +43,7 @@ func fail(_ message: String) -> Never {
 }
 
 var indent = RewrapMarkdown.IndentStyle.preserve
+var utf16Width = false
 var widthArguments: [String] = []
 var ranges: [RewrapMarkdown.LineRange] = []
 var argumentIterator = arguments.makeIterator()
@@ -61,6 +63,9 @@ while let argument = argumentIterator.next() {
             fail("Expected --indent=preserve, --indent=tabs, or --indent=spaces.")
         }
         indent = style
+    } else if argument == "--width-unit" || argument.hasPrefix("--width-unit=") {
+        guard argument == "--width-unit=utf16" else { fail("Expected --width-unit=utf16.") }
+        utf16Width = true
     } else if let value = Int(argument) {
         widthArguments.append(String(value))
     } else if strict && !["--check", "--unwrap", "--commit", "--repair"].contains(argument) {
@@ -99,14 +104,14 @@ let text = decodedInput ?? ""
 let output: String
 if !ranges.isEmpty {
     do {
-        output = try RewrapMarkdown.rewrap(text, lines: ranges, width: unwrap ? 0 : width, indent: indent, repair: repair)
+        output = try RewrapMarkdown.rewrap(text, lines: ranges, width: unwrap ? 0 : width, indent: indent, repair: repair, utf16Width: utf16Width)
     } catch {
         fail(error.localizedDescription)
     }
 } else if commitMessage {
-    output = RewrapMarkdown.rewrapCommitMessage(text, width: unwrap ? 0 : width, indent: indent, repair: repair)
+    output = RewrapMarkdown.rewrapCommitMessage(text, width: unwrap ? 0 : width, indent: indent, repair: repair, utf16Width: utf16Width)
 } else {
-    output = RewrapMarkdown.rewrap(text, width: unwrap ? 0 : width, indent: indent, repair: repair)
+    output = RewrapMarkdown.rewrap(text, width: unwrap ? 0 : width, indent: indent, repair: repair, utf16Width: utf16Width)
 }
 let outputBytes = Data(output.utf8)
 if check {

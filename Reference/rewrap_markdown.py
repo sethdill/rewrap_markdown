@@ -125,7 +125,7 @@ def version_string() -> str:
 
 
 def usage_string() -> str:
-    return """Usage: rewrap-markdown [--check] [--lines START:END]... [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
+    return """Usage: rewrap-markdown [--check] [--lines START:END]... [--width-unit=utf16] [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
 
 Read Markdown from standard input and write the transformed text to standard output.
 
@@ -133,6 +133,7 @@ Read Markdown from standard input and write the transformed text to standard out
             Exit 0 if unchanged, 1 if different, or 2 for argument or input errors.
   --lines   Rewrap blocks touching inclusive, 1-based input lines. Repeatable.
             Incompatible with --commit.
+  --width-unit=utf16  Measure wrap width in UTF-16 code units.
   --unwrap  Join paragraphs and list items onto one line (equivalent to width 0).
   --commit  Preserve the subject, comments, and trailers of a Git commit message.
   --repair  Fix spacing around inline code enclosed in parentheses or braces.
@@ -166,6 +167,16 @@ class ProsePunctuation:
     CODE_ENCLOSURES = {"(", "{"}
     TRAILING_CLOSERS = {")", "]", "}", "”", "’", "»", "›", '"', "'", "）", "」", "』"}
     EXPRESSIVE_MARKS = {"?", "!", "…", "？", "！", "؟"}
+
+    OPENING_QUOTES = {"“", "„", "‘", "‚"}
+    CLOSING_QUOTES = {"”", "’"}
+    URL_QUOTE_SUFFIX = re.compile(r"""["'”’»›]+[.,!?;:]*$""")
+
+    @staticmethod
+    def bare_url_quote_start(text: str, start: int, end: int) -> int:
+        # Expose trailing quotes while keeping the entire URL token intact.
+        match = ProsePunctuation.URL_QUOTE_SUFFIX.search(text, start, end)
+        return match.start() if match else end
 
     def __init__(self, text: str, opaque: list[bool], repair: bool):
         self.text = text
@@ -211,6 +222,11 @@ class ProsePunctuation:
 
         if left in self.openers or right in self.closers or last == "(" or first == ")":
             return " "
+        # Directional quotes still face their text when another delimiter is unmatched.
+        if last in self.OPENING_QUOTES and left not in self.closers:
+            return " "
+        if first in self.CLOSING_QUOTES and not self.is_word_character(right + 1):
+            return " "
         return None
 
     def prose_character(self, index: int) -> Optional[str]:
@@ -249,29 +265,23 @@ class ProsePunctuation:
             if mark is None:
                 continue
             straight_quote = mark in {'"', "'"}
-            if (mark in {"’", "'"} and self.is_alphanumeric(index - 1)
-                    and self.is_alphanumeric(index + 1)):
+            if (mark in {"’", "'"} and self.is_word_character(index - 1)
+                    and self.is_word_character(index + 1)):
                 continue
             if (stack and mark in stack[-1][1]
-                    and (not straight_quote or not self.is_alphanumeric(index + 1))):
+                    and (not straight_quote or not self.is_word_character(index + 1))):
                 opener, _ = stack.pop()
                 self.openers[opener] = index
                 self.closers[index] = opener
             elif mark in self.DELIMITER_PAIRS and (
-                not straight_quote or self.can_open_straight_quote(mark, index)
+                not straight_quote or not self.is_word_character(index - 1)
             ):
                 stack.append((index, self.DELIMITER_PAIRS[mark]))
 
-    def is_alphanumeric(self, index: int) -> bool:
+    def is_word_character(self, index: int) -> bool:
         if not 0 <= index < len(self.text):
             return False
         return self.text[index].isalnum() or unicodedata.category(self.text[index]).startswith("M")
-
-    def can_open_straight_quote(self, mark: str, index: int) -> bool:
-        if self.is_alphanumeric(index - 1):
-            return False
-        # A word-initial apostrophe can signal an omission, as in 'tis.
-        return mark != "'" or self.prose_character(index + 1) == " "
 
 
 def tokenize_inline(text: str, repair: bool = False) -> list[str]:
@@ -296,7 +306,8 @@ def tokenize_inline(text: str, repair: bool = False) -> list[str]:
         start, end = atom.span()
         append_words(cursor, start)
         append_range(start, end)
-        opaque[start:end] = [True] * (end - start)
+        opaque_end = ProsePunctuation.bare_url_quote_start(text, start, end) if atom.group("url") else end
+        opaque[start:opaque_end] = [True] * (opaque_end - start)
         if atom.group("backticks"):
             code_starts[start] = end
             code_ends.add(end)
@@ -364,7 +375,7 @@ def keep_markdown_markers_with_prose(tokens: list[str], column: int) -> list[str
     return groups
 
 
-def wrap_tokens(tokens: list[str], width: int, column: int) -> list[str]:
+def wrap_tokens(tokens: list[str], width: int, column: int, utf16_width: bool) -> list[str]:
     """
     Greedy word-wrap a token stream to `width` columns. A single token longer
     than `width` is placed alone on its own (over-length) line rather than
@@ -380,14 +391,14 @@ def wrap_tokens(tokens: list[str], width: int, column: int) -> list[str]:
     
     for tok in keep_markdown_markers_with_prose(tokens, column):
         token_start = column + current_len + (1 if current else 0)
-        next_len = end_column(tok, token_start) - column
+        next_len = end_column(tok, token_start, utf16_width) - column
         if current and next_len > width:
             line = " ".join(current)
             # Opening punctuation in prose can become a block if it stands alone.
             if lines or not starts_wrapped_block(line, column):
                 lines.append(line)
                 current = [tok]
-                current_len = end_column(tok, column) - column
+                current_len = end_column(tok, column, utf16_width) - column
                 continue
         current.append(tok)
         current_len = next_len
@@ -410,7 +421,7 @@ def join_paragraph_lines(lines: list[str]) -> str:
     return "".join(parts)
 
 
-def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: bool) -> list[str]:
+def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: bool, utf16_width: bool) -> list[str]:
     """
     Reflow a paragraph's raw source lines to `width` columns.
 
@@ -443,7 +454,7 @@ def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: b
     out_lines: list[str] = []
     for text, break_style in segments:
         tokens = tokenize_inline(text, repair)
-        wrapped = wrap_tokens(tokens, width, column) if tokens else [""]
+        wrapped = wrap_tokens(tokens, width, column, utf16_width) if tokens else [""]
         if break_style is not None and wrapped:
             wrapped[-1] = wrapped[-1] + break_style
         out_lines.extend(wrapped)
@@ -456,9 +467,12 @@ def wrap_paragraph_text(raw_lines: list[str], width: int, column: int, repair: b
 # ---------------------------------------------------------------------------
 
 
-def end_column(text: str, column: int) -> int:
+def end_column(text: str, column: int, utf16_width: bool = False) -> int:
     for character in text:
-        column += 4 - column % 4 if character == "\t" else 1
+        if character == "\t":
+            column += 4 - column % 4
+        else:
+            column += 2 if utf16_width and ord(character) > 0xFFFF else 1
     return column
 
 
@@ -555,14 +569,14 @@ class ProseEdit(NamedTuple):
         )
 
 
-def process_block(lines: list[str], width: int, style: str, repair: bool) -> list[str]:
-    rendered, _ = process_blocks(lines, width, set(), style, 0, 0, repair)
+def process_block(lines: list[str], width: int, style: str, repair: bool, utf16_width: bool) -> list[str]:
+    rendered, _ = process_blocks(lines, width, set(), style, 0, 0, repair, utf16_width=utf16_width)
     return rendered
 
 
 def process_blocks(
     lines: list[str], width: int, lazy_lines: set[int], style: str,
-    input_col: int, output_col: int, repair: bool, edits: Optional[list[ProseEdit]] = None,
+    input_col: int, output_col: int, repair: bool, edits: Optional[list[ProseEdit]] = None, *, utf16_width: bool,
 ) -> tuple[list[str], int]:
     # A line missing list indentation can extend a paragraph, but cannot
     # start a block or extend a protected block such as a code fence.
@@ -704,7 +718,7 @@ def process_blocks(
             quoted_edits = [] if edits is not None else None
             rendered, _ = process_blocks(
                 inner, nested_width(width, prefix_width), set(), style,
-                input_col + bqm.end(1), output_col + prefix_width, repair, quoted_edits
+                input_col + bqm.end(1), output_col + prefix_width, repair, quoted_edits, utf16_width=utf16_width
             )
             if edits is not None:
                 prefix = syntax[:bqm.end(1)]
@@ -725,7 +739,7 @@ def process_blocks(
             first_text = line[fnm.end(2):]
             rendered, i = process_list_item(
                 lines, i, marker, first_text, width, lazy_lines, style, input_col, output_col,
-                repair=repair, allows_lazy_lines=False, edits=edits
+                repair=repair, utf16_width=utf16_width, allows_lazy_lines=False, edits=edits
             )
             out.extend(rendered)
             continue
@@ -744,7 +758,7 @@ def process_blocks(
                 return render_list_marker(leading, marker, padding, tab_padding, style, input_col, column)
             rendered, i = process_list_item(
                 lines, i, leading + marker + padding, first_text, width, lazy_lines,
-                style, input_col, output_col, repair=repair, allows_lazy_lines=True, output_marker=output_marker, edits=edits
+                style, input_col, output_col, repair=repair, utf16_width=utf16_width, allows_lazy_lines=True, output_marker=output_marker, edits=edits
             )
             if rendered and not tab_padding and style == "preserve" and not tab_stops_shift:
                 rendered[0] = line.rstrip()
@@ -760,10 +774,10 @@ def process_blocks(
             para.append(lines[i])
             i += 1
         if edits is None:
-            out.extend(wrap_paragraph_text(para, width, output_col, repair))
+            out.extend(wrap_paragraph_text(para, width, output_col, repair, utf16_width))
         else:
             def render_paragraph(width, column, para=para):
-                return wrap_paragraph_text(para, width, column, repair)
+                return wrap_paragraph_text(para, width, column, repair, utf16_width)
 
             span = (start, i)
             edits.append(ProseEdit(span, None, True, render_paragraph))
@@ -800,6 +814,7 @@ def process_list_item(
     output_col: int,
     *,
     repair: bool,
+    utf16_width: bool,
     allows_lazy_lines: bool,
     output_marker: Optional[Callable[[int], str]] = None,
     edits: Optional[list[ProseEdit]] = None,
@@ -855,7 +870,7 @@ def process_list_item(
     item_edits = [] if edits is not None else None
     rendered, consumed = process_blocks(
         item, nested_width(width, output_width), lazy_lines, style,
-        input_col + content_col, output_col + output_width, repair, item_edits
+        input_col + content_col, output_col + output_width, repair, item_edits, utf16_width=utf16_width
     )
     def continuation_prefix(prefix, width, column):
         if style == "preserve" and original_continuation is not None:
@@ -906,7 +921,7 @@ def render_hanging(
     return out
 
 
-def rewrap(text: str, width: int, indent: str = "preserve", repair: bool = False) -> str:
+def rewrap(text: str, width: int, indent: str = "preserve", repair: bool = False, *, utf16_width: bool = False) -> str:
     # Normalize line endings, preserve trailing newline presence.
     had_trailing_newline = text.endswith("\n")
     lines: list[str] = text.split("\n")
@@ -914,7 +929,7 @@ def rewrap(text: str, width: int, indent: str = "preserve", repair: bool = False
     if lines and lines[-1] == "" and had_trailing_newline:
         lines = lines[:-1]
     
-    out = process_block(lines, normalize_width(width), indent, repair)
+    out = process_block(lines, normalize_width(width), indent, repair, utf16_width)
     result: str = "\n".join(out)
     if had_trailing_newline:
         result += "\n"
@@ -923,7 +938,7 @@ def rewrap(text: str, width: int, indent: str = "preserve", repair: bool = False
 
 
 def rewrap_lines(
-    text: str, ranges: list[tuple[int, int]], width: int, indent: str, repair: bool,
+    text: str, ranges: list[tuple[int, int]], width: int, indent: str, repair: bool, *, utf16_width: bool = False,
 ) -> str:
     parts = re.split(r"(\r\n|[\r\n])", text)
     lines = parts[::2]
@@ -938,7 +953,7 @@ def rewrap_lines(
 
     edits = []
     width = normalize_width(width)
-    process_blocks(lines, width, set(), indent, 0, 0, repair, edits)
+    process_blocks(lines, width, set(), indent, 0, 0, repair, edits, utf16_width=utf16_width)
     ranges = sorted(ranges)
     selected = set()
     range_index = 0
@@ -997,7 +1012,7 @@ def commit_trailer_block_start(lines: list[str]) -> Optional[int]:
     return start if found_trailer else None
 
 
-def process_commit_message_body(lines: list[str], width: int, indent: str, repair: bool) -> list[str]:
+def process_commit_message_body(lines: list[str], width: int, indent: str, repair: bool, utf16_width: bool) -> list[str]:
     trailer_start = commit_trailer_block_start(lines)
     body_end = len(lines) if trailer_start is None else trailer_start
     output: list[str] = []
@@ -1005,7 +1020,7 @@ def process_commit_message_body(lines: list[str], width: int, indent: str, repai
 
     def flush_pending() -> None:
         if pending:
-            output.extend(process_block(pending, width, indent, repair))
+            output.extend(process_block(pending, width, indent, repair, utf16_width))
             pending.clear()
 
     for line in lines[:body_end]:
@@ -1022,7 +1037,7 @@ def process_commit_message_body(lines: list[str], width: int, indent: str, repai
 
 
 def rewrap_commit_message(
-    text: str, width: int = DEFAULT_COMMIT_MESSAGE_WIDTH, indent: str = "preserve", repair: bool = False
+    text: str, width: int = DEFAULT_COMMIT_MESSAGE_WIDTH, indent: str = "preserve", repair: bool = False, *, utf16_width: bool = False
 ) -> str:
     had_trailing_newline = text.endswith("\n")
     lines = text.split("\n")
@@ -1032,7 +1047,7 @@ def rewrap_commit_message(
         return text
 
     output = [lines[0]]
-    output.extend(process_commit_message_body(lines[1:], normalize_width(width), indent, repair))
+    output.extend(process_commit_message_body(lines[1:], normalize_width(width), indent, repair, utf16_width))
     result = "\n".join(output)
     return result + "\n" if had_trailing_newline else result
 
@@ -1053,6 +1068,7 @@ def main():
     arguments = sys.argv[1:]
     check = "--check" in arguments
     indent = "preserve"
+    utf16_width = False
     strict = check or "--lines" in arguments
     ranges = []
     width_arguments = []
@@ -1075,6 +1091,10 @@ def main():
             indent = argument.removeprefix("--indent=")
             if indent not in ("preserve", "tabs", "spaces"):
                 fail("Expected --indent=preserve, --indent=tabs, or --indent=spaces.")
+        elif argument == "--width-unit" or argument.startswith("--width-unit="):
+            if argument != "--width-unit=utf16":
+                fail("Expected --width-unit=utf16.")
+            utf16_width = True
         elif argument not in ("--check", "--unwrap", "--commit", "--repair"):
             try:
                 int(argument)
@@ -1110,13 +1130,13 @@ def main():
 
     if ranges:
         try:
-            output = rewrap_lines(data, ranges, width, indent, repair)
+            output = rewrap_lines(data, ranges, width, indent, repair, utf16_width=utf16_width)
         except ValueError as error:
             fail(str(error))
     elif commit_message:
-        output = rewrap_commit_message(data, width, indent=indent, repair=repair)
+        output = rewrap_commit_message(data, width, indent=indent, repair=repair, utf16_width=utf16_width)
     else:
-        output = rewrap(data, width, indent=indent, repair=repair)
+        output = rewrap(data, width, indent=indent, repair=repair, utf16_width=utf16_width)
     if check:
         raise SystemExit(0 if output.encode("utf-8") == input_bytes else 1)
     if ranges:
