@@ -7,6 +7,9 @@
 - [Markdown It Understands](#markdown-it-understands)
 - [Install](#install)
 - [Command Line](#command-line)
+  - [Check Formatting](#check-formatting)
+  - [Preview Formatting Changes](#preview-formatting-changes)
+  - [Rewrap Specific Lines](#rewrap-specific-lines)
 - [BBEdit](#bbedit)
 - [Other Editors](#other-editors)
 - [Development](#development)
@@ -92,7 +95,7 @@ installer below.
 
 The command-line tool supports macOS 12 or later and Linux. BBEdit integration
 and the `.pkg` installer require macOS; the integrations have been tested with
-BBEdit 15.5.5. Linux release binaries are introduced in 0.3.
+BBEdit 15.5.5. Linux release binaries are available starting with 0.3.
 
 ### macOS Installer
 
@@ -114,7 +117,7 @@ Each release includes a `.sha256` file. Set `VERSION` to the version you
 downloaded and run this in the directory containing both files:
 
 ```sh
-VERSION=0.3
+VERSION=0.4
 shasum -a 256 -c "rewrap-markdown-${VERSION}-unsigned.pkg.sha256"
 ```
 
@@ -133,7 +136,7 @@ Download the binary for your Mac from the
 Set `VERSION` to the version you downloaded:
 
 ```sh
-VERSION=0.3
+VERSION=0.4
 ARCH=$(uname -m)
 mkdir -p "$HOME/.local/bin"
 install -m 755 \
@@ -150,17 +153,17 @@ your shell path, add this to `~/.zprofile` when using Zsh or
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-### Linux Release Binary (0.3)
+### Linux Release Binary
 
 From the [releases page](https://github.com/sethdill/rewrap_markdown/releases),
-choose a release starting with 0.3 and download both
+choose v0.3 or later and download both
 `rewrap-markdown-VERSION-linux-x86_64` (Intel/AMD) or
 `rewrap-markdown-VERSION-linux-aarch64` (ARM64), and its `.sha256` file.
 
 In the directory containing the downloaded files:
 
 ```sh
-VERSION=0.3
+VERSION=0.4
 ARCH=$(uname -m)  # x86_64 or aarch64
 BINARY="rewrap-markdown-${VERSION}-linux-${ARCH}"
 sha256sum -c "${BINARY}.sha256"
@@ -267,6 +270,21 @@ and leave stdout empty. Exit status `0` means the bytes match, `1` means
 formatting would change them, and `2` indicates an argument or input error
 reported on stderr. The check uses the requested width and supports
 `--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`.
+
+### Preview Formatting Changes
+
+Before rewrapping a document you're editing, use `diff -u` to see which lines
+the formatter would change. This leaves `draft.md` untouched.
+
+```sh
+if preview=$(mktemp "${TMPDIR:-/tmp}/rewrap-preview.XXXXXX"); then
+    rewrap-markdown 80 < draft.md > "$preview" && diff -u draft.md "$preview"
+    rm -f "$preview"
+fi
+```
+
+Lines prefixed with `-` come from the original, and lines prefixed with `+`
+show the proposed replacement. No diff output means the files match.
 
 ### Rewrap Specific Lines
 

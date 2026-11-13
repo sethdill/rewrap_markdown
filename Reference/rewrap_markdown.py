@@ -49,7 +49,7 @@ import sys
 import unicodedata
 from typing import Callable, Literal, NamedTuple, Optional
 
-VERSION = "0.3"
+VERSION = "0.4"
 DEFAULT_WIDTH = 70
 DEFAULT_COMMIT_MESSAGE_WIDTH = 72
 BreakStyle = Literal["\\", "  "]

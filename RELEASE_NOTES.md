@@ -1,24 +1,27 @@
-# Rewrap Markdown 0.3
+# Rewrap Markdown 0.4
 
-Rewrap Markdown 0.3 can unwrap Markdown for web forms and rewrap Git commit
-messages without disturbing their special structure.
+Rewrap Markdown 0.4 adds formatting checks and line-range wrapping, improves
+prose punctuation, and fixes cases where wrapping could change how Markdown
+renders.
 
 ## Highlights
 
-- **Unwrap mode:** `--unwrap`, or width `0`, joins each paragraph and list item
-  onto one line while preserving Markdown structure and intentional hard
-  breaks. BBEdit's Markdown-aware Hard Wrap dialog also accepts `0`.
-- **Commit message mode:** `--commit` leaves the subject, `#` comment lines, and
-  final Git trailer block unchanged while rewrapping the body at 72 columns by
-  default.
-- **Commit hook:** The release includes a `commit-msg` hook that safely rewrites
-  a message only after the filter succeeds.
-- **Linux command-line support:** Swift and Python support wrapping, `--unwrap`,
-  `--commit`, and the `commit-msg` hook on Linux. Release binaries for x86_64
-  and aarch64 are statically linked with Swift's official Static Linux SDK and
-  include SHA-256 files. Both architectures are tested natively with Ubuntu
-  22.04/24.04, Debian 12, and Alpine 3.22 userlands; other Linux environments
-  have not been validated. BBEdit and the installer remain macOS-only.
-- **Discoverable CLI:** `--help` describes the available modes.
+- **Check formatting.** Use `--check` in CI or scripts. It leaves stdout empty
+  and exits with `0` if the input is already formatted, `1` if formatting
+  would change it, or `2` on an argument or input error.
+- **Rewrap specific lines.** Use repeatable `--lines START:END` arguments to
+  rewrap prose touched by inclusive, 1-based input ranges. Protected blocks
+  and bytes outside the selected prose are preserved. Combine it with
+  `--check` to check just those ranges.
+- **Preserve Markdown structure.** Wrapping keeps prose from accidentally
+  becoming a list, heading, blockquote, or other Markdown block. It also
+  keeps literal backslashes from turning into hard line breaks.
+- **Improve punctuation handling.** Wrapping keeps punctuation next to the
+  text or inline markup it belongs to, including matched quotes and a wider
+  range of sentence marks. Opt-in `--repair` also fixes spacing around
+  inline code in matched parentheses and braces.
+- **Match BBEdit column counts.** BBEdit's Markdown-aware wrapping uses
+  UTF-16 code units to match the editor's column counts for text such as
+  emoji. Use `--width-unit=utf16` for the same behavior on the command line.
 
-Both new modes are available in the Swift executable and Python implementation.
+Both CLIs support the new flags.

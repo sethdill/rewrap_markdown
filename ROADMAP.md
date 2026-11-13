@@ -45,6 +45,14 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 
 ## 0.4
 
+### Check mode and partial-file wrapping
+
+- [x] Add `--check` to both CLIs to report whether formatting would change the
+  input, for use in CI and scripts.
+- [x] Accept repeatable `--lines START:END` ranges in both CLIs. Rewrap prose
+  touched by those ranges and preserve protected blocks and bytes outside the
+  selected prose.
+
 ### Punctuation repair
 
 - [x] Keep prose punctuation with its neighboring word or inline span in basic
@@ -74,7 +82,7 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 
 ### Check mode and pre-commit integration
 
-- [ ] Add `--check` and `--diff` for CI and review workflows.
+- [ ] Add `--diff` for review workflows.
 - [ ] Accept multiple file arguments and add safe in-place editing with `-i`.
 - [ ] Add a hook definition for the pre-commit framework.
 
@@ -91,10 +99,7 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 
 ### Partial-file wrapping
 
-- [ ] Accept explicit line ranges and optionally limit changes to paragraphs
-  touched by a Git diff.
-- [ ] Keep unchanged regions byte-for-byte stable for agent and assistant
-  workflows.
+- [ ] Limit changes to paragraphs touched by a Git diff.
 
 ### Packaging
 

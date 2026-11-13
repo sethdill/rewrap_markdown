@@ -8,7 +8,7 @@ public enum RewrapMarkdown {
         case preserve, tabs, spaces
     }
 
-    public static let version = "0.3"
+    public static let version = "0.4"
     public static let defaultWidth = 70
     public static let defaultCommitMessageWidth = 72
 
