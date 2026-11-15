@@ -12,6 +12,8 @@ property defaultWrapWidth : 70
 property minWrapWidth : 0
 property maxWrapWidth : 1000
 property rewrapMarkdownPath : ""
+-- Set an absolute path in a test copy to try Experiments/BBEditHardWrapDialog.
+property wrapDialogPath : ""
 property preferencesSuite : "com.sethdillingham.rewrap-markdown"
 property wrapWidthKey : "wrapWidth"
 
@@ -23,6 +25,7 @@ on MenuSelect(menuName, itemName)
 	if my isShiftKeyPressed() then return false
 	if menuName is not "Text" then return false
 	if itemName is not "Hard Wrap…" and itemName is not "Hard Wrap" then return false
+	set usesExperimentalDialog to itemName is "Hard Wrap…" and my wrapDialogPath is not ""
 
 	tell application "BBEdit.app"
 		if not (exists front window) then return false
@@ -42,6 +45,12 @@ on MenuSelect(menuName, itemName)
 			if not my isMarkdownDocument(documentName, languageName) then return false
 
 			set selectedLength to length of selection
+			if usesExperimentalDialog then
+				set originalWindowID to its ID
+				set originalDocumentID to ID of its document
+				if selectedLength is not 0 then set originalSelectionOffset to characterOffset of selection
+			end if
+
 			if selectedLength is 0 then
 				set shouldReplaceDocument to true
 				set sourceText to contents as text
@@ -72,7 +81,23 @@ on MenuSelect(menuName, itemName)
 	end try
 
 	tell application "BBEdit.app"
+		if usesExperimentalDialog and not (exists front window) then return true
 		tell front window
+			-- The helper is modal in its own process. Discard stale results if BBEdit's target changed.
+			if usesExperimentalDialog then
+				if its ID is not originalWindowID then return true
+				if ID of its document is not originalDocumentID then return true
+				if length of selection is not selectedLength then return true
+				considering case, diacriticals, punctuation, hyphens and white space
+					if shouldReplaceDocument then
+						if (contents as text) is not sourceText then return true
+					else
+						if characterOffset of selection is not originalSelectionOffset then return true
+						if (selection as text) is not sourceText then return true
+					end if
+				end considering
+			end if
+
 			if shouldReplaceDocument then
 				set contents to wrappedText
 			else
@@ -121,6 +146,20 @@ on saveWrapWidth(newWidth)
 end saveWrapWidth
 
 on askForWrapWidth(currentWidth)
+	if my wrapDialogPath is not "" then
+		try
+			set dialogCommand to quoted form of (my wrapDialogPath) & " " & (currentWidth as text) & " " & (minWrapWidth as text) & " " & (maxWrapWidth as text)
+			set widthText to do shell script dialogCommand
+			if widthText is "cancel" then error number -128
+			set candidateWidth to widthText as integer
+			if candidateWidth is less than minWrapWidth or candidateWidth is greater than maxWrapWidth then error "The dialog returned a width outside the allowed range."
+			return candidateWidth
+		on error errorMessage number errorNumber
+			if errorNumber is -128 then error number -128
+			display alert "Could not open the experimental Hard Wrap dialog." message errorMessage
+		end try
+	end if
+
 	repeat
 		set dialogResult to display dialog "Rewrap Markdown width (0 unwraps):" default answer (currentWidth as text) buttons {"Cancel", "Rewrap"} default button "Rewrap" cancel button "Cancel"
 		set widthText to text returned of dialogResult
