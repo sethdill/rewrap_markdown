@@ -1,62 +1,141 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="NO">
+<document type="com.apple.InterfaceBuilder3.Cocoa.XIB" version="3.0" toolsVersion="22505" targetRuntime="MacOSX.Cocoa" propertyAccessControl="none" useAutolayout="YES">
     <dependencies>
-        <deployment identifier="macosx"/>
         <plugIn identifier="com.apple.InterfaceBuilder.CocoaPlugin" version="22505"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <objects>
         <customObject id="-2" userLabel="File's Owner" customClass="HardWrapDialogController">
             <connections>
-                <outlet property="widthField" destination="DIA-TF-001" id="DIA-OU-001"/>
+                <outlet property="indentationMenu" destination="PJE-lO-14z" id="DIA-OU-003"/>
+                <outlet property="repairButton" destination="3KP-qn-9Lk" id="DIA-OU-004"/>
+                <outlet property="unwrapButton" destination="gge-9S-gdb" id="DIA-OU-005"/>
+                <outlet property="versionLabel" destination="6Ck-a9-RNM" id="DIA-OU-006"/>
+                <outlet property="widthField" destination="iN7-27-mPM" id="DIA-OU-001"/>
                 <outlet property="window" destination="DIA-WN-001" id="DIA-OU-002"/>
             </connections>
         </customObject>
         <customObject id="-1" userLabel="First Responder" customClass="FirstResponder"/>
         <customObject id="-3" userLabel="Application" customClass="NSObject"/>
-        <window title="Rewrap Markdown" releasedWhenClosed="NO" visibleAtLaunch="NO" id="DIA-WN-001">
+        <window title="Rewrap Markdown" releasedWhenClosed="NO" visibleAtLaunch="NO" animationBehavior="default" id="DIA-WN-001">
             <windowStyleMask key="styleMask" titled="YES"/>
-            <rect key="contentRect" x="0.0" y="0.0" width="290" height="120"/>
-            <view key="contentView" id="DIA-CV-001">
-                <rect key="frame" x="0.0" y="0.0" width="290" height="120"/>
+            <rect key="contentRect" x="0.0" y="0.0" width="316" height="186"/>
+            <rect key="screenRect" x="0.0" y="0.0" width="1680" height="1025"/>
+            <view key="contentView" wantsLayer="YES" id="DIA-CV-001">
+                <rect key="frame" x="0.0" y="0.0" width="316" height="186"/>
                 <autoresizingMask key="autoresizingMask"/>
                 <subviews>
-                    <textField id="DIA-LB-001">
-                        <rect key="frame" x="18" y="79" width="162" height="16"/>
-                        <textFieldCell key="cell" editable="NO" selectable="NO" title="Width (0 unwraps):" id="DIA-TC-001">
+                    <textField focusRingType="none" horizontalCompressionResistancePriority="250" translatesAutoresizingMaskIntoConstraints="NO" id="6MM-ce-SoU">
+                        <rect key="frame" x="78" y="74" width="77" height="16"/>
+                        <textFieldCell key="cell" alignment="right" title="Indentation:" id="cR5-3P-A9U">
                             <font key="font" metaFont="system"/>
                             <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
                         </textFieldCell>
                     </textField>
-                    <textField id="DIA-TF-001">
-                        <rect key="frame" x="190" y="77" width="80" height="21"/>
-                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" sendsActionOnEndEditing="YES" state="on" borderStyle="bezel" drawsBackground="YES" id="DIA-TC-002">
+                    <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="DIA-BT-001">
+                        <rect key="frame" x="149" y="16" width="76" height="32"/>
+                        <buttonCell key="cell" type="push" title="Cancel" bezelStyle="rounded" alignment="center" borderStyle="border" id="DIA-BC-001">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                             <font key="font" metaFont="system"/>
-                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
-                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
-                        </textFieldCell>
-                    </textField>
-                    <button id="DIA-BT-001">
-                        <rect key="frame" x="98" y="16" width="88" height="32"/>
-                        <buttonCell key="cell" type="push" title="Cancel" bezelStyle="rounded" alignment="center" id="DIA-BC-001">
-                            <font key="font" metaFont="system"/>
-                            <string key="keyEquivalent" base64-UTF8="YES">Gw</string>
+                            <string key="keyEquivalent" base64-UTF8="YES">
+Gw
+</string>
                         </buttonCell>
                         <connections>
                             <action selector="cancel:" target="-2" id="DIA-AC-001"/>
                         </connections>
                     </button>
-                    <button id="DIA-BT-002">
-                        <rect key="frame" x="184" y="16" width="92" height="32"/>
-                        <buttonCell key="cell" type="push" title="Rewrap" bezelStyle="rounded" alignment="center" id="DIA-BC-002">
+                    <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="DIA-BT-002">
+                        <rect key="frame" x="222" y="16" width="80" height="32"/>
+                        <buttonCell key="cell" type="push" title="Rewrap" bezelStyle="rounded" alignment="center" borderStyle="border" id="DIA-BC-002">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                             <font key="font" metaFont="system"/>
-                            <string key="keyEquivalent" base64-UTF8="YES">DQ</string>
+                            <string key="keyEquivalent" base64-UTF8="YES">
+DQ
+</string>
                         </buttonCell>
                         <connections>
                             <action selector="accept:" target="-2" id="DIA-AC-002"/>
                         </connections>
                     </button>
+                    <textField focusRingType="none" verticalHuggingPriority="750" textCompletion="NO" translatesAutoresizingMaskIntoConstraints="NO" id="iN7-27-mPM">
+                        <rect key="frame" x="160" y="145" width="77" height="21"/>
+                        <constraints>
+                            <constraint firstAttribute="width" constant="77" id="kZJ-vO-ov8"/>
+                        </constraints>
+                        <textFieldCell key="cell" scrollable="YES" lineBreakMode="clipping" selectable="YES" editable="YES" sendsActionOnEndEditing="YES" state="on" borderStyle="bezel" drawsBackground="YES" id="oLZ-IF-K8t">
+                            <font key="font" metaFont="system"/>
+                            <color key="textColor" name="controlTextColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <button verticalHuggingPriority="750" id="gge-9S-gdb">
+                        <rect key="frame" x="158" y="120" width="73" height="18"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                        <buttonCell key="cell" type="check" title="Unwrap" bezelStyle="regularSquare" imagePosition="left" inset="2" id="c8g-ke-MQH">
+                            <behavior key="behavior" pushIn="YES" changeContents="YES" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                        <connections>
+                            <action selector="toggleUnwrap:" target="-2" id="DIA-AC-003"/>
+                        </connections>
+                    </button>
+                    <button verticalHuggingPriority="750" id="3KP-qn-9Lk">
+                        <rect key="frame" x="158" y="98" width="65" height="18"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                        <buttonCell key="cell" type="check" title="Repair" bezelStyle="regularSquare" imagePosition="left" inset="2" id="STF-Rr-eZI">
+                            <behavior key="behavior" changeContents="YES" doesNotDimImage="YES" lightByContents="YES"/>
+                            <font key="font" metaFont="system"/>
+                        </buttonCell>
+                    </button>
+                    <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6Ck-a9-RNM">
+                        <rect key="frame" x="18" y="26" width="31" height="16"/>
+                        <textFieldCell key="cell" lineBreakMode="clipping" title="v0.4" id="1Ka-h2-5y7">
+                            <font key="font" metaFont="system"/>
+                            <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
+                            <color key="backgroundColor" name="textBackgroundColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
+                    <popUpButton verticalHuggingPriority="750" id="PJE-lO-14z">
+                        <rect key="frame" x="158" y="66" width="150" height="26"/>
+                        <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMinY="YES"/>
+                        <popUpButtonCell key="cell" type="push" title="Preserve existing" bezelStyle="rounded" alignment="center" lineBreakMode="truncatingTail" state="on" borderStyle="border" imageScaling="proportionallyDown" inset="2" selectedItem="vo7-D8-noC" id="7ht-jc-Rcl">
+                            <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
+                            <font key="font" metaFont="menu"/>
+                            <menu key="menu" id="One-LV-PO3">
+                                <items>
+                                    <menuItem title="Preserve existing" state="on" id="vo7-D8-noC"/>
+                                    <menuItem title="Spaces" tag="1" id="uFy-Ke-CrJ"/>
+                                    <menuItem title="Tabs" tag="2" id="tTS-OI-fji"/>
+                                </items>
+                            </menu>
+                        </popUpButtonCell>
+                    </popUpButton>
+                    <textField focusRingType="none" horizontalCompressionResistancePriority="250" preferredMaxLayoutWidth="122" translatesAutoresizingMaskIntoConstraints="NO" id="DIA-LB-001">
+                        <rect key="frame" x="109" y="148" width="44" height="16"/>
+                        <textFieldCell key="cell" alignment="right" title="Width:" id="DIA-TC-001">
+                            <font key="font" metaFont="system"/>
+                            <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>
+                        </textFieldCell>
+                    </textField>
                 </subviews>
+                <constraints>
+                    <constraint firstAttribute="bottom" secondItem="DIA-BT-002" secondAttribute="bottom" constant="20" id="DIA-LC-001"/>
+                    <constraint firstItem="DIA-BT-001" firstAttribute="centerY" secondItem="DIA-BT-002" secondAttribute="centerY" id="DIA-LC-002"/>
+                    <constraint firstItem="6Ck-a9-RNM" firstAttribute="firstBaseline" secondItem="DIA-BT-002" secondAttribute="firstBaseline" id="DIA-LC-003"/>
+                    <constraint firstAttribute="trailing" secondItem="DIA-BT-002" secondAttribute="trailing" constant="20" symbolic="YES" id="ESb-B7-9wv"/>
+                    <constraint firstItem="DIA-BT-002" firstAttribute="leading" secondItem="DIA-BT-001" secondAttribute="trailing" constant="12" symbolic="YES" id="GWG-pJ-pW6"/>
+                    <constraint firstItem="iN7-27-mPM" firstAttribute="leading" secondItem="DIA-CV-001" secondAttribute="leading" constant="160" id="KHT-jm-a8u"/>
+                    <constraint firstItem="gge-9S-gdb" firstAttribute="top" secondItem="iN7-27-mPM" secondAttribute="bottom" constant="8" symbolic="YES" id="LGk-Ab-S3n"/>
+                    <constraint firstItem="6MM-ce-SoU" firstAttribute="firstBaseline" secondItem="PJE-lO-14z" secondAttribute="firstBaseline" id="YEj-d3-xUT"/>
+                    <constraint firstItem="6Ck-a9-RNM" firstAttribute="leading" secondItem="DIA-CV-001" secondAttribute="leading" constant="20" symbolic="YES" id="kpS-ih-Mz8"/>
+                    <constraint firstItem="iN7-27-mPM" firstAttribute="leading" secondItem="DIA-LB-001" secondAttribute="trailing" constant="8" symbolic="YES" id="mg1-XS-6VI"/>
+                    <constraint firstItem="DIA-LB-001" firstAttribute="firstBaseline" secondItem="iN7-27-mPM" secondAttribute="firstBaseline" id="qrY-PJ-D41"/>
+                    <constraint firstItem="PJE-lO-14z" firstAttribute="leading" secondItem="6MM-ce-SoU" secondAttribute="trailing" constant="8" symbolic="YES" id="y3X-zq-blk"/>
+                    <constraint firstItem="iN7-27-mPM" firstAttribute="top" secondItem="DIA-CV-001" secondAttribute="top" constant="20" symbolic="YES" id="zqi-Xh-3iF"/>
+                </constraints>
             </view>
+            <point key="canvasLocation" x="31" y="-85"/>
         </window>
     </objects>
 </document>

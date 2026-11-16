@@ -16,6 +16,9 @@ property rewrapMarkdownPath : ""
 property wrapDialogPath : ""
 property preferencesSuite : "com.sethdillingham.rewrap-markdown"
 property wrapWidthKey : "wrapWidth"
+property lastPositiveWidthKey : "lastPositiveWrapWidth"
+property repairKey : "repair"
+property indentationKey : "indentation"
 
 use framework "AppKit"
 use framework "Foundation"
@@ -61,21 +64,14 @@ on MenuSelect(menuName, itemName)
 		end tell
 	end tell
 
-	set rememberedWidth to my rememberedWrapWidth()
-	if itemName is "Hard Wrap" then
-		set requestedWidth to rememberedWidth
-	else
-		try
-			set requestedWidth to my askForWrapWidth(rememberedWidth)
-			my saveWrapWidth(requestedWidth)
-		on error number -128
-			return true
-		end try
-	end if
-
 	try
-		set wrappedText to my rewrapMarkdown(sourceText, requestedWidth)
+		set executablePath to my findRewrapMarkdownExecutable()
+		set userDefaults to current application's NSUserDefaults's alloc()'s initWithSuiteName:(my preferencesSuite)
+		set wrapOptions to my rememberedWrapOptions(userDefaults)
+		if itemName is "Hard Wrap…" then set wrapOptions to my askForWrapOptions(wrapOptions, executablePath)
+		set wrappedText to my rewrapMarkdown(sourceText, wrapOptions, executablePath)
 	on error errorMessage number errorNumber
+		if errorNumber is -128 then return true
 		display alert "Could not rewrap Markdown." message errorMessage as critical
 		return true
 	end try
@@ -106,6 +102,7 @@ on MenuSelect(menuName, itemName)
 		end tell
 	end tell
 
+	if itemName is "Hard Wrap…" then my saveWrapOptions(wrapOptions, userDefaults)
 	return true
 end MenuSelect
 
@@ -129,37 +126,74 @@ on isShiftKeyPressed()
 	return ((rawFlags div shiftMask) mod 2 is not 0)
 end isShiftKeyPressed
 
-on rememberedWrapWidth()
-	set userDefaults to current application's NSUserDefaults's alloc()'s initWithSuiteName:(my preferencesSuite)
-	set savedValue to userDefaults's objectForKey:(my wrapWidthKey)
-	if savedValue is missing value then return my defaultWrapWidth
+on rememberedWrapOptions(userDefaults)
+	set savedWidth to my defaultWrapWidth
+	if (userDefaults's objectForKey:(my wrapWidthKey)) is not missing value then
+		set savedWidth to (userDefaults's integerForKey:(my wrapWidthKey)) as integer
+		if savedWidth is less than minWrapWidth or savedWidth is greater than maxWrapWidth then set savedWidth to my defaultWrapWidth
+	end if
+	set wantsUnwrap to savedWidth is 0
+	if wantsUnwrap then
+		set savedWidth to (userDefaults's integerForKey:(my lastPositiveWidthKey)) as integer
+		if savedWidth is less than 1 or savedWidth is greater than maxWrapWidth then set savedWidth to my defaultWrapWidth
+	end if
+	set savedIndent to userDefaults's stringForKey:(my indentationKey)
+	if savedIndent is not missing value then set savedIndent to savedIndent as text
+	if savedIndent is not in {"preserve", "spaces", "tabs"} then set savedIndent to "preserve"
+	set wantsRepair to (userDefaults's boolForKey:(my repairKey)) as boolean
+	return {settingsWidth:savedWidth, settingsUnwrap:wantsUnwrap, settingsRepair:wantsRepair, settingsIndent:savedIndent}
+end rememberedWrapOptions
 
-	set savedWidth to savedValue's integerValue() as integer
-	if savedWidth is less than minWrapWidth or savedWidth is greater than maxWrapWidth then return my defaultWrapWidth
-	return savedWidth
-end rememberedWrapWidth
-
-on saveWrapWidth(newWidth)
-	set userDefaults to current application's NSUserDefaults's alloc()'s initWithSuiteName:(my preferencesSuite)
-	userDefaults's setInteger:newWidth forKey:(my wrapWidthKey)
+on saveWrapOptions(wrapOptions, userDefaults)
+	userDefaults's setInteger:(my effectiveWidth(wrapOptions)) forKey:(my wrapWidthKey)
+	userDefaults's setInteger:(settingsWidth of wrapOptions) forKey:(my lastPositiveWidthKey)
+	userDefaults's setBool:(settingsRepair of wrapOptions) forKey:(my repairKey)
+	userDefaults's setObject:(settingsIndent of wrapOptions) forKey:(my indentationKey)
 	userDefaults's synchronize()
-end saveWrapWidth
+end saveWrapOptions
 
-on askForWrapWidth(currentWidth)
+on effectiveWidth(wrapOptions)
+	if settingsUnwrap of wrapOptions then return 0
+	return settingsWidth of wrapOptions
+end effectiveWidth
+
+on askForWrapOptions(wrapOptions, executablePath)
 	if my wrapDialogPath is not "" then
 		try
-			set dialogCommand to quoted form of (my wrapDialogPath) & " " & (currentWidth as text) & " " & (minWrapWidth as text) & " " & (maxWrapWidth as text)
-			set widthText to do shell script dialogCommand
-			if widthText is "cancel" then error number -128
-			set candidateWidth to widthText as integer
-			if candidateWidth is less than minWrapWidth or candidateWidth is greater than maxWrapWidth then error "The dialog returned a width outside the allowed range."
-			return candidateWidth
+			set formatterVersion to do shell script (quoted form of executablePath & " --version")
+			set dialogArguments to (settingsWidth of wrapOptions as text) & " " & (minWrapWidth as text) & " " & (maxWrapWidth as text)
+			set unwrapFlag to "0"
+			set repairFlag to "0"
+			if settingsUnwrap of wrapOptions then set unwrapFlag to "1"
+			if settingsRepair of wrapOptions then set repairFlag to "1"
+			set dialogArguments to dialogArguments & " " & unwrapFlag & " " & repairFlag
+			set replyText to do shell script (quoted form of (my wrapDialogPath) & " " & dialogArguments & " " & quoted form of (settingsIndent of wrapOptions) & " " & quoted form of formatterVersion)
+			if replyText is "cancel" then error number -128
+			return my parseWrapOptions(replyText)
 		on error errorMessage number errorNumber
 			if errorNumber is -128 then error number -128
-			display alert "Could not open the experimental Hard Wrap dialog." message errorMessage
+			display alert "Could not use the experimental Hard Wrap dialog." message errorMessage
 		end try
 	end if
 
+	set chosenWidth to my askForWrapWidth(my effectiveWidth(wrapOptions))
+	set settingsUnwrap of wrapOptions to chosenWidth is 0
+	if chosenWidth is greater than 0 then set settingsWidth of wrapOptions to chosenWidth
+	return wrapOptions
+end askForWrapOptions
+
+on parseWrapOptions(replyText)
+	set replyString to current application's NSString's stringWithString:replyText
+	set fields to (replyString's componentsSeparatedByString:tab) as list
+	if (count of fields) is not 4 then error "The Hard Wrap dialog returned invalid settings."
+	set {widthText, unwrapFlag, repairFlag, indentStyle} to fields
+	set candidateWidth to widthText as integer
+	if candidateWidth is less than 1 or candidateWidth is greater than maxWrapWidth or (candidateWidth as text) is not widthText then error "The dialog returned an invalid width."
+	if unwrapFlag is not in {"0", "1"} or repairFlag is not in {"0", "1"} or indentStyle is not in {"preserve", "spaces", "tabs"} then error "The Hard Wrap dialog returned invalid settings."
+	return {settingsWidth:candidateWidth, settingsUnwrap:(unwrapFlag is "1"), settingsRepair:(repairFlag is "1"), settingsIndent:indentStyle}
+end parseWrapOptions
+
+on askForWrapWidth(currentWidth)
 	repeat
 		set dialogResult to display dialog "Rewrap Markdown width (0 unwraps):" default answer (currentWidth as text) buttons {"Cancel", "Rewrap"} default button "Rewrap" cancel button "Cancel"
 		set widthText to text returned of dialogResult
@@ -174,15 +208,17 @@ on askForWrapWidth(currentWidth)
 	end repeat
 end askForWrapWidth
 
-on rewrapMarkdown(sourceText, wrapWidth)
-	set executablePath to my findRewrapMarkdownExecutable()
+on rewrapMarkdown(sourceText, wrapOptions, executablePath)
 	set tempDirectory to do shell script "mktemp -d"
 	set inputPath to tempDirectory & "/input.md"
 	set outputPath to tempDirectory & "/output.md"
 
 	try
 		my writeUTF8Text(sourceText, inputPath)
-		do shell script quoted form of executablePath & " --width-unit=utf16 " & (wrapWidth as text) & " < " & quoted form of inputPath & " > " & quoted form of outputPath
+		set formatterArguments to " --width-unit=utf16 --indent=" & quoted form of (settingsIndent of wrapOptions)
+		if settingsRepair of wrapOptions then set formatterArguments to formatterArguments & " --repair"
+		set wrapWidth to my effectiveWidth(wrapOptions)
+		do shell script quoted form of executablePath & formatterArguments & " " & (wrapWidth as text) & " < " & quoted form of inputPath & " > " & quoted form of outputPath
 		set wrappedText to my readUTF8Text(outputPath)
 		do shell script "rm -rf " & quoted form of tempDirectory
 		return wrappedText
