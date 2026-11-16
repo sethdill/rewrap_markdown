@@ -33,7 +33,7 @@
                         </textFieldCell>
                     </textField>
                     <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="DIA-BT-001">
-                        <rect key="frame" x="149" y="16" width="76" height="32"/>
+                        <rect key="frame" x="149" y="13" width="76" height="32"/>
                         <buttonCell key="cell" type="push" title="Cancel" bezelStyle="rounded" alignment="center" borderStyle="border" id="DIA-BC-001">
                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                             <font key="font" metaFont="system"/>
@@ -46,7 +46,7 @@ Gw
                         </connections>
                     </button>
                     <button verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="DIA-BT-002">
-                        <rect key="frame" x="222" y="16" width="80" height="32"/>
+                        <rect key="frame" x="223" y="13" width="80" height="32"/>
                         <buttonCell key="cell" type="push" title="Rewrap" bezelStyle="rounded" alignment="center" borderStyle="border" id="DIA-BC-002">
                             <behavior key="behavior" pushIn="YES" lightByBackground="YES" lightByGray="YES"/>
                             <font key="font" metaFont="system"/>
@@ -89,7 +89,7 @@ DQ
                         </buttonCell>
                     </button>
                     <textField focusRingType="none" horizontalHuggingPriority="251" verticalHuggingPriority="750" translatesAutoresizingMaskIntoConstraints="NO" id="6Ck-a9-RNM">
-                        <rect key="frame" x="18" y="26" width="31" height="16"/>
+                        <rect key="frame" x="18" y="23" width="31" height="16"/>
                         <textFieldCell key="cell" lineBreakMode="clipping" title="v0.4" id="1Ka-h2-5y7">
                             <font key="font" metaFont="system"/>
                             <color key="textColor" name="secondaryLabelColor" catalog="System" colorSpace="catalog"/>
@@ -112,7 +112,7 @@ DQ
                         </popUpButtonCell>
                     </popUpButton>
                     <textField focusRingType="none" horizontalCompressionResistancePriority="250" preferredMaxLayoutWidth="122" translatesAutoresizingMaskIntoConstraints="NO" id="DIA-LB-001">
-                        <rect key="frame" x="109" y="148" width="44" height="16"/>
+                        <rect key="frame" x="110" y="148" width="44" height="16"/>
                         <textFieldCell key="cell" alignment="right" title="Width:" id="DIA-TC-001">
                             <font key="font" metaFont="system"/>
                             <color key="textColor" name="labelColor" catalog="System" colorSpace="catalog"/>

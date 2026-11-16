@@ -39,6 +39,9 @@ On macOS this creates:
 - `dist/Markdown-Hard-Wrap-Menu-Action.applescript`
 - `dist/rewrap-markdown-commit-msg`
 
+The standalone menu script uses a width prompt when the dialog helper is
+absent. The installer includes the helper and its nib.
+
 On Linux, `make dist` stages a native `linux-ARCH` executable plus the Python
 script and Git hook; it excludes BBEdit files. These native builds are not
 necessarily portable to another distribution. `make dist-cli` stages only this
@@ -52,8 +55,10 @@ make pkg-unsigned
 Packaging/pkg/verify-installer.sh "dist/rewrap-markdown-$(cat VERSION)-unsigned.pkg"
 ```
 
-This is useful for testing, but local builds only produce a binary for the
-current machine architecture. The GitHub Actions release workflow builds both:
+Local builds produce a command-line binary for the current machine
+architecture. The Hard Wrap dialog helper includes Intel and Apple Silicon
+slices so it can run on either architecture. The GitHub Actions release
+workflow builds both command-line binaries:
 
 - `rewrap-markdown-VERSION-macos-x86_64`
 - `rewrap-markdown-VERSION-macos-arm64`

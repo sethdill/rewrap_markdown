@@ -78,7 +78,20 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
   delimiters with adjacent text. Preserve thin spaces before punctuation
   across soft breaks.
 
+## 0.5
+
+### BBEdit Hard Wrap dialog
+
+- [x] Add a dialog for width, Unwrap, Repair, and list indentation. Show the
+  formatter version and reuse the last applied options for immediate Hard Wrap.
+
 ## Later releases
+
+### Git commit messages in BBEdit
+
+- [ ] Offer optional Markdown-aware Hard Wrap for BBEdit's Git commit note
+  documents using the existing `--commit` mode. Preserve the subject, Git
+  comments, and final trailer block while rewrapping the body.
 
 ### Check mode and pre-commit integration
 

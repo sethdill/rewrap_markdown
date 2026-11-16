@@ -45,14 +45,19 @@ uninstaller="$expanded/core.pkg/Payload/Library/Application Support/Rewrap Markd
 license="$expanded/core.pkg/Payload/Library/Application Support/Rewrap Markdown/LICENSE"
 notice="$expanded/core.pkg/Payload/Library/Application Support/Rewrap Markdown/NOTICE"
 installer_license="$expanded/Resources/LICENSE.txt"
+hard_wrap="$expanded/hard-wrap.pkg/Payload/Library/Application Support/Rewrap Markdown/Components/Hard Wrap"
 
 [ -x "$binary" ]
 [ -x "$uninstaller" ]
 [ -f "$license" ]
 [ -f "$notice" ]
 [ -f "$installer_license" ]
+[ -f "$hard_wrap/Text•Hard Wrap….scpt" ]
+[ -x "$hard_wrap/HardWrapDialog" ]
+[ -s "$hard_wrap/HardWrapDialog.nib" ]
 grep -q '"License" shall mean the terms and conditions for use, reproduction, and distribution as defined by Sections 1 through 9 of this document.' "$installer_license"
 lipo "$binary" -verify_arch $expected_archs
+lipo "$hard_wrap/HardWrapDialog" -verify_arch $expected_archs
 "$binary" --version
 printf '%s\n' 'A long Markdown paragraph that verifies the packaged executable can wrap its input.' | "$binary" 40 >/dev/null
 

@@ -97,6 +97,9 @@ The command-line tool supports macOS 12 or later and Linux. BBEdit integration
 and the `.pkg` installer require macOS; the integrations have been tested with
 BBEdit 15.5.5. Linux release binaries are available starting with 0.3.
 
+The 0.5 branch is in development. The download examples below use the
+published 0.4 release.
+
 ### macOS Installer
 
 The easiest installation is the universal macOS package from the
@@ -121,7 +124,7 @@ VERSION=0.4
 shasum -a 256 -c "rewrap-markdown-${VERSION}-unsigned.pkg.sha256"
 ```
 
-Upgrades retain the remembered Hard Wrap width and automatically update any
+Upgrades retain the remembered Hard Wrap settings and automatically update any
 optional components that were installed previously. To remove all package
 components and their receipts:
 
@@ -226,8 +229,10 @@ FILTER_WIDTH=80 make install
 
 Install the Markdown-aware Hard Wrap integration with
 `make install-hard-wrap`, or install both BBEdit integrations with
-`make install-all`. Remove Hard Wrap with `make uninstall-hard-wrap`, or remove
-both integrations and the executable with `make uninstall-all`.
+`make install-all`. Building the Hard Wrap dialog from source requires Xcode's
+Interface Builder compiler (`ibtool`). Remove Hard Wrap with
+`make uninstall-hard-wrap`, or remove both integrations and the executable
+with `make uninstall-all`.
 
 Override the executable directory or BBEdit support folder when needed:
 
@@ -419,16 +424,19 @@ the command line, pass `--width-unit=utf16`.
 
 ### Markdown-Aware Hard Wrap
 
-The menu attachment takes over **Text > Hard Wrap…** only for Markdown
-documents. It asks for a width, remembers your answer, and rewraps the selection
-or document. For other document types, BBEdit behaves normally.
+The menu attachment takes over **Text > Hard Wrap…** for Markdown documents
+and rewraps the selection or the whole document. For other document types,
+BBEdit behaves normally.
 
-Enter `0` for the width to unwrap each paragraph and list item onto one line.
-The remembered value also works with **Text > Hard Wrap** for immediate unwraps.
+Starting in 0.5, the dialog offers **Width**, **Unwrap**, **Repair**, and
+**Indentation**. Unwrap joins each paragraph and list item onto one line and
+keeps the previous width available. Repair applies the [opt-in spacing rules](#repair-spacing-around-inline-code-opt-in).
+Indentation preserves the existing list style by default. You can also choose
+spaces or tabs. The footer shows the version of the formatter BBEdit uses.
 
 Its modifiers mirror BBEdit's own menu behavior:
 
-- Use **Text > Hard Wrap** to rewrap immediately using the remembered width.
+- Use **Text > Hard Wrap** to apply the last used settings immediately.
 - Hold Shift to bypass Rewrap Markdown and run BBEdit's built-in command.
 
 ## Other Editors

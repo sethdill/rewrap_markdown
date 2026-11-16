@@ -1,13 +1,14 @@
 # macOS Installer Package
 
-Run `make pkg-unsigned` to build the local installer prototype in `dist/`.
+Run `make pkg-unsigned` to build the local installer in `dist/`.
 The product package contains four components:
 
 - **Core** is required and hidden. It installs the executable in
   `/Library/Application Support/Rewrap Markdown/` together with the project
   license and notice.
 - **Markdown-aware Hard Wrap** is selected by default. It installs the
-  compiled menu attachment in the current user's BBEdit support folder.
+  compiled menu attachment and its dialog in the current user's BBEdit
+  support folder.
 - **BBEdit Text Filter** is not selected by default. It installs
   `Rewrap Markdown.bbpackage` in the current user's BBEdit `Packages` folder.
 - **Command-line link** is not selected by default. It links
@@ -19,8 +20,8 @@ canonical `LICENSE` file is installed unchanged with the executable.
 
 When the installer is run again, optional components already present in the
 shared installation are selected automatically so upgrades update them. The
-remembered Hard Wrap width is stored in the user's preferences rather than in
-the compiled script, so replacing the script does not reset it.
+Hard Wrap settings are stored in the user's preferences and survive replacing
+the compiled script.
 
 The installer uses the account logged in at `/dev/console`. It prefers the
 sandboxed BBEdit support folder when BBEdit's container exists and otherwise
@@ -36,10 +37,13 @@ components manually:
    BBEdit's `Menu Scripts` folder.
 2. In that folder, make a second copy or symbolic link named
    `Text•Hard Wrap.scpt`.
-3. If desired, copy `Rewrap Markdown.bbpackage-template` from
+3. Copy `HardWrapDialog` and `HardWrapDialog.nib` from the same package
+   component directory to `Rewrap Markdown/Hard Wrap Dialog/` inside the
+   BBEdit support folder, alongside `Menu Scripts`.
+4. If desired, copy `Rewrap Markdown.bbpackage-template` from
    `/Library/Application Support/Rewrap Markdown/Components/Text Filter/` to
    BBEdit's `Packages` folder and rename it `Rewrap Markdown.bbpackage`.
-4. Quit and reopen BBEdit after adding or removing the Text Filter package.
+5. Quit and reopen BBEdit after adding or removing the Text Filter package.
 
 The Hard Wrap script finds the core executable in its standard installed
 location. A user who moves the executable can instead edit the script's
@@ -72,7 +76,7 @@ sudo "/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
 ```
 
 The uninstaller deliberately leaves customized files and unrelated commands
-alone. It also leaves the remembered width preference in place for a future
+alone. It also leaves the remembered Hard Wrap settings in place for a future
 reinstallation.
 
 ## Verification

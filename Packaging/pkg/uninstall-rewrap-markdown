@@ -14,11 +14,13 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 shared_dir=${REWRAP_MARKDOWN_SHARED_DIR:-/Library/Application Support/Rewrap Markdown}
 packages_dir="$bbedit_support_dir/Packages"
 menu_scripts_dir="$bbedit_support_dir/Menu Scripts"
+dialog_dir="$bbedit_support_dir/Rewrap Markdown/Hard Wrap Dialog"
 command_link=${REWRAP_MARKDOWN_COMMAND_LINK:-/usr/local/bin/rewrap-markdown}
 command_target="$shared_dir/rewrap-markdown"
 
 rm -rf "$packages_dir/Rewrap Markdown.bbpackage"
 rm -f "$menu_scripts_dir/Text•Hard Wrap….scpt" "$menu_scripts_dir/Text•Hard Wrap.scpt"
+rm -f "$dialog_dir/HardWrapDialog" "$dialog_dir/HardWrapDialog.nib"
 
 if [ -L "$command_link" ] && [ "$(readlink "$command_link")" = "$command_target" ]; then
 	rm -f "$command_link"

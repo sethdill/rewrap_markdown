@@ -12,7 +12,7 @@ property defaultWrapWidth : 70
 property minWrapWidth : 0
 property maxWrapWidth : 1000
 property rewrapMarkdownPath : ""
--- Set an absolute path in a test copy to try Experiments/BBEditHardWrapDialog.
+-- Set an absolute path to override the helper in BBEdit's support folder.
 property wrapDialogPath : ""
 property preferencesSuite : "com.sethdillingham.rewrap-markdown"
 property wrapWidthKey : "wrapWidth"
@@ -28,7 +28,7 @@ on MenuSelect(menuName, itemName)
 	if my isShiftKeyPressed() then return false
 	if menuName is not "Text" then return false
 	if itemName is not "Hard Wrap…" and itemName is not "Hard Wrap" then return false
-	set usesExperimentalDialog to itemName is "Hard Wrap…" and my wrapDialogPath is not ""
+	set dialogPath to ""
 
 	tell application "BBEdit.app"
 		if not (exists front window) then return false
@@ -46,10 +46,11 @@ on MenuSelect(menuName, itemName)
 			end try
 
 			if not my isMarkdownDocument(documentName, languageName) then return false
+			if itemName is "Hard Wrap…" then set dialogPath to my findWrapDialogExecutable()
 
 			-- BBEdit defines two properties named selection. 'sele' addresses the window's text range.
 			set selectedLength to length of «class sele» of it
-			if usesExperimentalDialog then
+			if dialogPath is not "" then
 				set originalWindowID to its ID
 				set originalDocumentID to ID of its document
 				if selectedLength is not 0 then set originalSelectionOffset to characterOffset of «class sele» of it
@@ -70,16 +71,16 @@ on MenuSelect(menuName, itemName)
 		set userDefaults to current application's NSUserDefaults's alloc()'s initWithSuiteName:(my preferencesSuite)
 		set wrapOptions to my rememberedWrapOptions(userDefaults)
 		if itemName is "Hard Wrap…" then
-			set wrapOptions to my askForWrapOptions(wrapOptions, executablePath)
+			set wrapOptions to my askForWrapOptions(wrapOptions, executablePath, dialogPath)
 			if wrapOptions is missing value then return true
 		end if
 		set wrappedText to my rewrapMarkdown(sourceText, wrapOptions, executablePath)
 
 		tell application "BBEdit.app"
-			if usesExperimentalDialog and not (exists front window) then return true
+			if dialogPath is not "" and not (exists front window) then return true
 			tell front window
 				-- The helper is modal in its own process. Discard stale results if BBEdit's target changed.
-				if usesExperimentalDialog then
+				if dialogPath is not "" then
 					if its ID is not originalWindowID then return true
 					if ID of its document is not originalDocumentID then return true
 					if length of «class sele» of it is not selectedLength then return true
@@ -163,8 +164,22 @@ on effectiveWidth(wrapOptions)
 	return settingsWidth of wrapOptions
 end effectiveWidth
 
-on askForWrapOptions(wrapOptions, executablePath)
-	if my wrapDialogPath is not "" then
+on findWrapDialogExecutable()
+	if my wrapDialogPath is not "" then return my wrapDialogPath
+
+	try
+		tell application "BBEdit.app" to set appFolders to support folders
+		set scriptsPath to POSIX path of (|menu scripts| of appFolders)
+		set scriptsPath to current application's NSString's stringWithString:scriptsPath
+		set supportPath to scriptsPath's stringByDeletingLastPathComponent()
+		set dialogPath to (supportPath's stringByAppendingPathComponent:"Rewrap Markdown/Hard Wrap Dialog/HardWrapDialog") as text
+		if my isExecutable(dialogPath) then return dialogPath
+	end try
+	return ""
+end findWrapDialogExecutable
+
+on askForWrapOptions(wrapOptions, executablePath, dialogPath)
+	if dialogPath is not "" then
 		set formatterVersion to do shell script (quoted form of executablePath & " --version")
 		set dialogArguments to (settingsWidth of wrapOptions as text) & " " & (minWrapWidth as text) & " " & (maxWrapWidth as text)
 		set unwrapFlag to "0"
@@ -172,7 +187,7 @@ on askForWrapOptions(wrapOptions, executablePath)
 		if settingsUnwrap of wrapOptions then set unwrapFlag to "1"
 		if settingsRepair of wrapOptions then set repairFlag to "1"
 		set dialogArguments to dialogArguments & " " & unwrapFlag & " " & repairFlag
-		set replyText to do shell script (quoted form of (my wrapDialogPath) & " " & dialogArguments & " " & quoted form of (settingsIndent of wrapOptions) & " " & quoted form of formatterVersion)
+		set replyText to do shell script (quoted form of dialogPath & " " & dialogArguments & " " & quoted form of (settingsIndent of wrapOptions) & " " & quoted form of formatterVersion)
 		if replyText is "cancel" then return missing value
 		return my parseWrapOptions(replyText)
 	end if

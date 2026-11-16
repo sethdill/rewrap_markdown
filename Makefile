@@ -40,6 +40,9 @@ PKG_DISTRIBUTION := $(PKG_BUILD_DIR)/Distribution.xml
 DIST_INSTALLER := $(DIST_DIR)/$(PRODUCT)-$(VERSION)-unsigned.pkg
 HARD_WRAP_SCRIPT_NAME := Text•Hard Wrap….scpt
 HARD_WRAP_IMMEDIATE_SCRIPT_NAME := Text•Hard Wrap.scpt
+HARD_WRAP_DIALOG_SOURCE := Distribution/BBEdit/HardWrapDialog
+HARD_WRAP_DIALOG_BUILD := .build/bbedit-hard-wrap
+PKG_HARD_WRAP_COMPONENT := $(PKG_HARD_WRAP_ROOT)/$(PKG_SHARED_DIR)/Components/Hard Wrap
 BBEDIT_FILTERS_DIR ?= $(shell osascript \
 	-e 'tell application "BBEdit" to set allFolders to support folders' \
 	-e 'set targetFolder to (|text filters| of allFolders)' \
@@ -51,8 +54,9 @@ BBEDIT_MENU_SCRIPTS_DIR ?= $(shell osascript \
 INSTALLED_FILTER = $(BBEDIT_FILTERS_DIR)/$(FILTER_NAME)
 INSTALLED_HARD_WRAP = $(patsubst %/,%,$(BBEDIT_MENU_SCRIPTS_DIR))/$(HARD_WRAP_SCRIPT_NAME)
 INSTALLED_HARD_WRAP_IMMEDIATE = $(patsubst %/,%,$(BBEDIT_MENU_SCRIPTS_DIR))/$(HARD_WRAP_IMMEDIATE_SCRIPT_NAME)
+INSTALLED_HARD_WRAP_DIALOG = $(patsubst %/,%,$(BBEDIT_MENU_SCRIPTS_DIR))/../Rewrap Markdown/Hard Wrap Dialog
 
-.PHONY: require-macos dist-cli dist-macos release-linux dist-linux test-smoke build release test test-executable dist pkg-unsigned package-unsigned install-cli install install-hard-wrap install-all uninstall-cli uninstall uninstall-hard-wrap uninstall-all clean print-bbedit-filters-dir
+.PHONY: require-macos hard-wrap-dialog dist-cli dist-macos release-linux dist-linux test-smoke build release test test-executable dist pkg-unsigned package-unsigned install-cli install install-hard-wrap install-all uninstall-cli uninstall uninstall-hard-wrap uninstall-all clean print-bbedit-filters-dir
 
 build:
 	swift build
@@ -99,13 +103,23 @@ dist-macos: require-macos dist-cli
 	cp "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript" "$(DIST_BBEDIT_HARD_WRAP)"
 	chmod +x "$(DIST_BBEDIT_SWIFT)"
 
+hard-wrap-dialog: require-macos
+	mkdir -p "$(HARD_WRAP_DIALOG_BUILD)"
+	xcrun ibtool --compile "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog.nib" "$(HARD_WRAP_DIALOG_SOURCE)/HardWrapDialog.xib"
+	@set -e; for arch in x86_64 arm64; do \
+		xcrun swiftc -target "$$arch-apple-macosx12.0" \
+			-module-cache-path "$(HARD_WRAP_DIALOG_BUILD)/module-cache" \
+			"$(HARD_WRAP_DIALOG_SOURCE)/main.swift" -o "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog-$$arch"; \
+	done
+	xcrun lipo -create "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog-x86_64" "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog-arm64" -output "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog"
+
 pkg-unsigned: require-macos test-executable package-unsigned
 
-package-unsigned: require-macos
+package-unsigned: require-macos hard-wrap-dialog
 	rm -rf "$(PKG_BUILD_DIR)"
 	mkdir -p "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)"
 	mkdir -p "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/Components/Installer"
-	mkdir -p "$(PKG_HARD_WRAP_ROOT)/$(PKG_SHARED_DIR)/Components/Hard Wrap"
+	mkdir -p "$(PKG_HARD_WRAP_COMPONENT)"
 	mkdir -p "$(PKG_TEXT_FILTER_PACKAGE)/Contents/Text Filters"
 	mkdir -p "$(PKG_COMMAND_LINE_ROOT)/usr/local/bin"
 	mkdir -p "$(PKG_COMMAND_LINE_ROOT)/$(PKG_SHARED_DIR)/Components/Command Line"
@@ -117,7 +131,9 @@ package-unsigned: require-macos
 	cp "Packaging/pkg/uninstall-rewrap-markdown" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/uninstall-rewrap-markdown"
 	cp "Packaging/pkg/resolve-user.sh" "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/Components/Installer/resolve-user.sh"
 	chmod +x "$(PKG_CORE_ROOT)/$(PKG_SHARED_DIR)/uninstall-rewrap-markdown"
-	osacompile -o "$(PKG_HARD_WRAP_ROOT)/$(PKG_SHARED_DIR)/Components/Hard Wrap/$(HARD_WRAP_SCRIPT_NAME)" "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript"
+	osacompile -o "$(PKG_HARD_WRAP_COMPONENT)/$(HARD_WRAP_SCRIPT_NAME)" "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript"
+	install -m 0755 "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog" "$(PKG_HARD_WRAP_COMPONENT)/HardWrapDialog"
+	install -m 0644 "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog.nib" "$(PKG_HARD_WRAP_COMPONENT)/HardWrapDialog.nib"
 	cp "Distribution/BBEdit/Rewrap Markdown (Swift)" "$(PKG_TEXT_FILTER_PACKAGE)/Contents/Text Filters/Rewrap Markdown"
 	chmod +x "$(PKG_TEXT_FILTER_PACKAGE)/Contents/Text Filters/Rewrap Markdown"
 	plutil -create xml1 "$(PKG_TEXT_FILTER_PACKAGE)/Contents/Info.plist"
@@ -174,13 +190,16 @@ install: require-macos install-cli
 	chmod +x "$(INSTALLED_FILTER)"
 	@echo "Installed BBEdit text filter: $(INSTALLED_FILTER)"
 
-install-hard-wrap: require-macos install-cli
+install-hard-wrap: require-macos hard-wrap-dialog install-cli
 	@if [ -z "$(BBEDIT_MENU_SCRIPTS_DIR)" ]; then \
 		echo "Could not determine BBEdit's Menu Scripts folder."; \
 		echo "Set BBEDIT_MENU_SCRIPTS_DIR=/path/to/Menu Scripts and run make install-hard-wrap again."; \
 		exit 1; \
 	fi
 	mkdir -p "$(BBEDIT_MENU_SCRIPTS_DIR)"
+	mkdir -p "$(INSTALLED_HARD_WRAP_DIALOG)"
+	install -m 0644 "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog.nib" "$(INSTALLED_HARD_WRAP_DIALOG)/HardWrapDialog.nib"
+	install -m 0755 "$(HARD_WRAP_DIALOG_BUILD)/HardWrapDialog" "$(INSTALLED_HARD_WRAP_DIALOG)/HardWrapDialog"
 	osacompile -o "$(INSTALLED_HARD_WRAP)" "Distribution/BBEdit/Markdown Hard Wrap Menu Action.applescript"
 	ln -sfn "$(HARD_WRAP_SCRIPT_NAME)" "$(INSTALLED_HARD_WRAP_IMMEDIATE)"
 	@echo "Installed BBEdit Hard Wrap menu actions:"
@@ -208,6 +227,7 @@ uninstall-hard-wrap: require-macos
 		exit 1; \
 	fi
 	rm -f "$(INSTALLED_HARD_WRAP)" "$(INSTALLED_HARD_WRAP_IMMEDIATE)"
+	rm -f "$(INSTALLED_HARD_WRAP_DIALOG)/HardWrapDialog" "$(INSTALLED_HARD_WRAP_DIALOG)/HardWrapDialog.nib"
 	@echo "Removed BBEdit Hard Wrap menu actions."
 
 uninstall-all: require-macos uninstall uninstall-hard-wrap uninstall-cli
