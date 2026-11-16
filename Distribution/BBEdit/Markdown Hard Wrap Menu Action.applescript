@@ -47,11 +47,12 @@ on MenuSelect(menuName, itemName)
 
 			if not my isMarkdownDocument(documentName, languageName) then return false
 
-			set selectedLength to length of selection
+			-- BBEdit defines two properties named selection. 'sele' addresses the window's text range.
+			set selectedLength to length of «class sele» of it
 			if usesExperimentalDialog then
 				set originalWindowID to its ID
 				set originalDocumentID to ID of its document
-				if selectedLength is not 0 then set originalSelectionOffset to characterOffset of selection
+				if selectedLength is not 0 then set originalSelectionOffset to characterOffset of «class sele» of it
 			end if
 
 			if selectedLength is 0 then
@@ -59,7 +60,7 @@ on MenuSelect(menuName, itemName)
 				set sourceText to contents as text
 			else
 				set shouldReplaceDocument to false
-				set sourceText to selection as text
+				set sourceText to («class sele» of it) as text
 			end if
 		end tell
 	end tell
@@ -68,41 +69,46 @@ on MenuSelect(menuName, itemName)
 		set executablePath to my findRewrapMarkdownExecutable()
 		set userDefaults to current application's NSUserDefaults's alloc()'s initWithSuiteName:(my preferencesSuite)
 		set wrapOptions to my rememberedWrapOptions(userDefaults)
-		if itemName is "Hard Wrap…" then set wrapOptions to my askForWrapOptions(wrapOptions, executablePath)
+		if itemName is "Hard Wrap…" then
+			set wrapOptions to my askForWrapOptions(wrapOptions, executablePath)
+			if wrapOptions is missing value then return true
+		end if
 		set wrappedText to my rewrapMarkdown(sourceText, wrapOptions, executablePath)
-	on error errorMessage number errorNumber
-		if errorNumber is -128 then return true
-		display alert "Could not rewrap Markdown." message errorMessage as critical
-		return true
-	end try
 
-	tell application "BBEdit.app"
-		if usesExperimentalDialog and not (exists front window) then return true
-		tell front window
-			-- The helper is modal in its own process. Discard stale results if BBEdit's target changed.
-			if usesExperimentalDialog then
-				if its ID is not originalWindowID then return true
-				if ID of its document is not originalDocumentID then return true
-				if length of selection is not selectedLength then return true
-				considering case, diacriticals, punctuation, hyphens and white space
-					if shouldReplaceDocument then
-						if (contents as text) is not sourceText then return true
-					else
-						if characterOffset of selection is not originalSelectionOffset then return true
-						if (selection as text) is not sourceText then return true
-					end if
-				end considering
-			end if
+		tell application "BBEdit.app"
+			if usesExperimentalDialog and not (exists front window) then return true
+			tell front window
+				-- The helper is modal in its own process. Discard stale results if BBEdit's target changed.
+				if usesExperimentalDialog then
+					if its ID is not originalWindowID then return true
+					if ID of its document is not originalDocumentID then return true
+					if length of «class sele» of it is not selectedLength then return true
+					considering case, diacriticals, punctuation, hyphens and white space
+						if shouldReplaceDocument then
+							if (contents as text) is not sourceText then return true
+						else
+							if characterOffset of «class sele» of it is not originalSelectionOffset then return true
+							if ((«class sele» of it) as text) is not sourceText then return true
+						end if
+					end considering
+				end if
 
-			if shouldReplaceDocument then
-				set contents to wrappedText
-			else
-				set selection to wrappedText
-			end if
+				if shouldReplaceDocument then
+					set contents to wrappedText
+				else
+					set contents of «class sele» of it to wrappedText
+				end if
+			end tell
 		end tell
-	end tell
 
-	if itemName is "Hard Wrap…" then my saveWrapOptions(wrapOptions, userDefaults)
+		if itemName is "Hard Wrap…" then my saveWrapOptions(wrapOptions, userDefaults)
+	on error errorMessage number errorNumber
+		if errorNumber is not -128 then
+			try
+				display alert "Could not complete Markdown Hard Wrap." message (errorMessage & " (" & errorNumber & ")") as critical
+			end try
+		end if
+	end try
 	return true
 end MenuSelect
 
@@ -159,21 +165,16 @@ end effectiveWidth
 
 on askForWrapOptions(wrapOptions, executablePath)
 	if my wrapDialogPath is not "" then
-		try
-			set formatterVersion to do shell script (quoted form of executablePath & " --version")
-			set dialogArguments to (settingsWidth of wrapOptions as text) & " " & (minWrapWidth as text) & " " & (maxWrapWidth as text)
-			set unwrapFlag to "0"
-			set repairFlag to "0"
-			if settingsUnwrap of wrapOptions then set unwrapFlag to "1"
-			if settingsRepair of wrapOptions then set repairFlag to "1"
-			set dialogArguments to dialogArguments & " " & unwrapFlag & " " & repairFlag
-			set replyText to do shell script (quoted form of (my wrapDialogPath) & " " & dialogArguments & " " & quoted form of (settingsIndent of wrapOptions) & " " & quoted form of formatterVersion)
-			if replyText is "cancel" then error number -128
-			return my parseWrapOptions(replyText)
-		on error errorMessage number errorNumber
-			if errorNumber is -128 then error number -128
-			display alert "Could not use the experimental Hard Wrap dialog." message errorMessage
-		end try
+		set formatterVersion to do shell script (quoted form of executablePath & " --version")
+		set dialogArguments to (settingsWidth of wrapOptions as text) & " " & (minWrapWidth as text) & " " & (maxWrapWidth as text)
+		set unwrapFlag to "0"
+		set repairFlag to "0"
+		if settingsUnwrap of wrapOptions then set unwrapFlag to "1"
+		if settingsRepair of wrapOptions then set repairFlag to "1"
+		set dialogArguments to dialogArguments & " " & unwrapFlag & " " & repairFlag
+		set replyText to do shell script (quoted form of (my wrapDialogPath) & " " & dialogArguments & " " & quoted form of (settingsIndent of wrapOptions) & " " & quoted form of formatterVersion)
+		if replyText is "cancel" then return missing value
+		return my parseWrapOptions(replyText)
 	end if
 
 	set chosenWidth to my askForWrapWidth(my effectiveWidth(wrapOptions))
