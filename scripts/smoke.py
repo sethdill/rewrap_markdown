@@ -2,6 +2,8 @@
 """Exercise a shipped CLI (Swift or Python) without a Swift installation."""
 import os
 from pathlib import Path
+import resource
+import signal
 import subprocess
 import shlex
 import sys
@@ -207,6 +209,73 @@ with open(os.devnull, 'wb') as write_only:
                                 capture_output=True, env=ENV)
 assert read_error.returncode == 2 and not read_error.stdout, read_error
 assert b'Could not read standard input' in read_error.stderr
+
+with tempfile.TemporaryDirectory(prefix='rewrap file smoke ') as directory:
+    source_path = Path(directory) / 'draft notes.md'
+    output_path = Path(directory) / 'wrapped notes.md'
+    original = b'# Heading\r\n\r\nFirst line\r\ncontinues.\r\n\r\nKeep this.  '
+    expected = original.replace(b'First line\r\ncontinues.', b'First line continues.')
+    source_path.write_bytes(original)
+    source_path.chmod(0o640)
+    output_path.write_bytes(b'old output')
+    output_path.chmod(0o644)
+    selection = ['--lines', '4:4', str(source_path)]
+    check_range(selection, b'ignored stdin', expected)
+    check_status(selection, b'ignored stdin', 1)
+    check_range(selection + ['--output', str(output_path)], b'', b'')
+    assert output_path.read_bytes() == expected
+    assert output_path.stat().st_mode & 0o777 == 0o644
+    assert source_path.read_bytes() == original
+    for arguments, diagnostic in (
+        (selection + ['--check', '--in-place'], b'--check cannot be used'),
+        (selection + ['--check', '--output', str(output_path)], b'--check cannot be used'),
+        (selection + ['--in-place', '--output', str(output_path)], b'cannot be used with --output'),
+        (['--in-place'], b'requires an input file'),
+    ):
+        check_range(arguments, b'', b'', 2, diagnostic)
+    assert source_path.read_bytes() == original
+    assert output_path.read_bytes() == expected
+
+    def limit_file_size():
+        # Make the temporary write fail even when the suite runs as root.
+        signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+        resource.setrlimit(resource.RLIMIT_FSIZE, (8, 8))
+
+    output_path.write_bytes(b'keep original output')
+    for destination in (['--output', str(output_path)], ['--in-place']):
+        result = subprocess.run(COMMAND + selection + destination, input=b'',
+                                capture_output=True, env=ENV, preexec_fn=limit_file_size)
+        assert result.returncode == 2, (destination, result.returncode, result.stderr)
+        assert not result.stdout and b'Could not write' in result.stderr, result
+        assert source_path.read_bytes() == original
+        assert output_path.read_bytes() == b'keep original output'
+        assert not list(Path(directory).glob('.rewrap-markdown.*'))
+    output_path.write_bytes(expected)
+
+    check_range(selection + ['--output', str(source_path)], b'', b'', 2, b'--in-place')
+    check_range(['--lines', '99:99', str(source_path), '--output', str(output_path)],
+                b'', b'', 2, b'out of bounds')
+    assert output_path.read_bytes() == expected
+    check_range(['--lines', '99:99', str(source_path), '--in-place'],
+                b'', b'', 2, b'out of bounds')
+    assert source_path.read_bytes() == original
+    check_range(selection + ['--in-place'], b'', b'')
+    assert source_path.read_bytes() == expected
+    assert source_path.stat().st_mode & 0o777 == 0o640
+    inode = source_path.stat().st_ino
+    check_range(selection + ['--in-place'], b'', b'')
+    assert source_path.stat().st_ino == inode
+    check_range(['--unknown'], b'', b'', 2, b'Unexpected argument')
+    check_range([str(source_path), str(output_path)], b'', b'', 2, b'one input file')
+    new_path = Path(directory) / 'new.md'
+    check_range(['--unwrap', '--output', str(new_path)], b'One\nparagraph.\n', b'')
+    assert new_path.read_bytes() == b'One paragraph.\n'
+    alias_path = Path(directory) / 'alias.md'
+    alias_path.symlink_to(source_path)
+    check_range(selection + ['--output', str(alias_path)], b'', b'', 2, b'regular file')
+    assert alias_path.is_symlink()
+    assert source_path.read_bytes() == expected
+    assert not list(Path(directory).glob('.rewrap-markdown.*'))
 
 # Invoke the installed hook through Git itself, including its failure path.
 with tempfile.TemporaryDirectory(prefix='rewrap smoke ') as directory:

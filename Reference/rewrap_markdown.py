@@ -45,7 +45,9 @@ Markdown, not for pathological edge cases.
 
 import os
 import re
+import stat
 import sys
+import tempfile
 import unicodedata
 from typing import Callable, Literal, NamedTuple, Optional
 
@@ -125,10 +127,12 @@ def version_string() -> str:
 
 
 def usage_string() -> str:
-    return """Usage: rewrap-markdown [--check] [--lines START:END]... [--width-unit=utf16] [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH]
+    return """Usage: rewrap-markdown [--check] [--lines START:END]... [--width-unit=utf16] [--unwrap] [--commit] [--repair] [--indent=preserve|tabs|spaces] [WIDTH] [FILE]
 
-Read Markdown from standard input and write the transformed text to standard output.
+Read Markdown from FILE or standard input. Write to standard output by default.
 
+  --output PATH  Atomically write the result to PATH.
+  --in-place     Atomically update FILE and preserve its permissions.
   --check   Compare UTF-8 bytes without writing formatted output.
             Exit 0 if unchanged, 1 if different, or 2 for argument or input errors.
   --lines   Rewrap blocks touching inclusive, 1-based input lines. Repeatable.
@@ -1057,24 +1061,68 @@ def fail(message: str):
     raise SystemExit(2)
 
 
-def main():
-    if "--version" in sys.argv[1:] or "-v" in sys.argv[1:]:
-        print(version_string())
-        return
-    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
-        print(usage_string())
-        return
+def destination_info(path):
+    try:
+        return os.lstat(path)
+    except FileNotFoundError:
+        return None
 
-    arguments = sys.argv[1:]
-    check = "--check" in arguments
+
+def replace_file(path, data, original):
+    directory = os.path.dirname(path) or "."
+    fd, temporary = tempfile.mkstemp(prefix=".rewrap-markdown.", dir=directory)
+    try:
+        with os.fdopen(fd, "wb") as handle:
+            handle.write(data)
+            handle.flush()
+            if original is not None:
+                os.fchmod(handle.fileno(), original.st_mode & 0o777)
+            os.fsync(handle.fileno())
+
+        current = destination_info(path)
+        if original is None:
+            unchanged = current is None
+        else:
+            unchanged = (current is not None
+                         and os.path.samestat(original, current)
+                         and original.st_ctime_ns == current.st_ctime_ns)
+        if not unchanged:
+            raise OSError("Destination changed during formatting")
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            os.unlink(temporary)
+
+
+def main():
     indent = "preserve"
     utf16_width = False
-    strict = check or "--lines" in arguments
     ranges = []
     width_arguments = []
-    argument_iterator = iter(arguments)
+    flags = set()
+    input_path = None
+    output_path = None
+    positional_only = False
+    argument_iterator = iter(sys.argv[1:])
     for argument in argument_iterator:
-        if argument == "--lines":
+        if positional_only:
+            if input_path is not None or not argument:
+                fail("Expected one input file.")
+            input_path = argument
+        elif argument == "--":
+            positional_only = True
+        elif argument in ("--version", "-v", "--help", "-h"):
+            print(version_string() if argument in ("--version", "-v") else usage_string())
+            return
+        elif argument in ("--check", "--unwrap", "--commit", "--repair", "--in-place"):
+            flags.add(argument)
+        elif argument == "--output":
+            path = next(argument_iterator, "")
+            if output_path is not None or not path or path.startswith("-"):
+                fail("Expected one --output PATH.")
+            output_path = path
+        elif argument == "--lines":
             value = next(argument_iterator, "")
             if not re.fullmatch(r"[0-9]+:[0-9]+", value):
                 fail("Expected --lines START:END with positive, ascending line numbers.")
@@ -1095,38 +1143,55 @@ def main():
             if argument != "--width-unit=utf16":
                 fail("Expected --width-unit=utf16.")
             utf16_width = True
-        elif argument not in ("--check", "--unwrap", "--commit", "--repair"):
-            try:
-                int(argument)
-            except ValueError:
-                if strict:
-                    fail(f"Unexpected argument: {argument}")
-            else:
-                width_arguments.append(argument)
-    if strict and len(width_arguments) > 1:
-        fail("Expected at most one width argument.")
+        elif re.fullmatch(r"[+-]?[0-9]+", argument):
+            width_arguments.append(argument)
+        elif argument.startswith("-") or not argument:
+            fail(f"Unexpected argument: {argument}")
+        else:
+            if input_path is not None:
+                fail("Expected at most one input file.")
+            input_path = argument
 
-    unwrap = "--unwrap" in arguments
-    commit_message = "--commit" in arguments
-    repair = "--repair" in arguments
+    if len(width_arguments) > 1:
+        fail("Expected at most one width argument.")
+    check = "--check" in flags
+    unwrap = "--unwrap" in flags
+    commit_message = "--commit" in flags
+    repair = "--repair" in flags
+    in_place = "--in-place" in flags
+    if in_place and (input_path is None or output_path is not None):
+        fail("--in-place requires an input file and cannot be used with --output.")
+    if check and (in_place or output_path is not None):
+        fail("--check cannot be used with --output or --in-place.")
     if commit_message and ranges:
         fail("--lines cannot be used with --commit.")
     width = get_width(width_arguments, DEFAULT_COMMIT_MESSAGE_WIDTH if commit_message else DEFAULT_WIDTH)
     if unwrap:
         width = 0
-    if strict:
-        try:
+    destination = input_path if in_place else output_path
+    input_label = "standard input" if input_path is None else repr(input_path)
+    try:
+        original = destination_info(destination) if destination is not None else None
+        if original is not None and not stat.S_ISREG(original.st_mode):
+            fail("Output path must be a regular file or a new file.")
+        if input_path is None:
             input_bytes = sys.stdin.buffer.read()
-            data = input_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            fail("Standard input is not valid UTF-8.")
-        except (OSError, AttributeError) as error:
-            fail(f"Could not read standard input: {error}")
-        # Match the universal newline handling of sys.stdin.read().
-        if not ranges:
-            data = data.replace("\r\n", "\n").replace("\r", "\n")
-    else:
-        data = sys.stdin.read()
+        else:
+            source = os.stat(input_path)
+            if not stat.S_ISREG(source.st_mode):
+                fail(f"Could not read {input_label}: expected a regular file.")
+            if original is not None and not in_place and os.path.samestat(source, original):
+                fail("Use --in-place to update the input file.")
+            with open(input_path, "rb") as handle:
+                input_bytes = handle.read()
+        data = input_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        label = "Standard input" if input_path is None else input_label
+        fail(f"{label} is not valid UTF-8.")
+    except (OSError, AttributeError) as error:
+        fail(f"Could not read {input_label} or prepare output: {error}")
+    if not ranges:
+        data = data.replace("\r\n", "\n").replace("\r", "\n")
 
     if ranges:
         try:
@@ -1137,12 +1202,17 @@ def main():
         output = rewrap_commit_message(data, width, indent=indent, repair=repair, utf16_width=utf16_width)
     else:
         output = rewrap(data, width, indent=indent, repair=repair, utf16_width=utf16_width)
+    output_bytes = output.encode("utf-8")
     if check:
-        raise SystemExit(0 if output.encode("utf-8") == input_bytes else 1)
-    if ranges:
-        sys.stdout.buffer.write(output.encode("utf-8"))
-    else:
-        sys.stdout.write(output)
+        raise SystemExit(0 if output_bytes == input_bytes else 1)
+    try:
+        if destination is None:
+            sys.stdout.buffer.write(output_bytes)
+            sys.stdout.buffer.flush()
+        elif not in_place or output_bytes != input_bytes:
+            replace_file(destination, output_bytes, original)
+    except OSError as error:
+        fail(f"Could not write {destination or 'standard output'}: {error}")
 
 
 if __name__ == "__main__":

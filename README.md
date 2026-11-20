@@ -249,11 +249,21 @@ current user.
 
 ### Wrap Markdown
 
-Wrap a document at 80 columns:
+Pass one Markdown file path to wrap it at 80 columns. By default the
+formatter writes the result to stdout. Omitting the path reads stdin.
 
 ```sh
-rewrap-markdown 80 < draft.md > draft-wrapped.md
+rewrap-markdown 80 draft.md
+rewrap-markdown 80 draft.md --output draft-wrapped.md
+rewrap-markdown 80 --in-place draft.md
 ```
+
+`--output PATH` writes a separate file. Use `--in-place` to update the input
+file. Both options write a temporary file beside the destination and replace
+it after the write succeeds. Replacement keeps the existing file's read, write,
+and execute permissions. New output files are private to the current user.
+`--in-place` skips replacement when the bytes match. Existing destinations
+must be regular files. For paths that begin with a dash, use a `./` prefix.
 
 Or rewrap text on the macOS clipboard:
 
@@ -270,11 +280,12 @@ rewrap-markdown --check 80 < draft.md
 python3 Reference/rewrap_markdown.py --check 80 < draft.md
 ```
 
-Both CLIs compare the formatted UTF-8 bytes with the original stdin bytes
+Both CLIs compare the formatted UTF-8 bytes with the original input bytes
 and leave stdout empty. Exit status `0` means the bytes match, `1` means
 formatting would change them, and `2` indicates an argument or input error
 reported on stderr. The check uses the requested width and supports
-`--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`.
+`--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`. Use
+`--check` without `--output` or `--in-place`.
 
 ### Preview Formatting Changes
 
@@ -293,13 +304,14 @@ show the proposed replacement. No diff output means the files match.
 
 ### Rewrap Specific Lines
 
-Use repeatable `--lines START:END` arguments to select lines from standard input.
+Use repeatable `--lines START:END` arguments to select lines from the input.
 Line numbers are 1-based and inclusive. Every range uses the original input's
 line numbers, even if rewrapping an earlier block changes its length.
 
 ```sh
 rewrap-markdown --lines 8:12 --lines 24:24 80 < draft.md > draft-wrapped.md
 rewrap-markdown --check --lines 8:12 80 < draft.md
+rewrap-markdown --lines 8:12 80 --in-place draft.md
 ```
 
 A range that touches prose selects the whole paragraph or the prose belonging to
