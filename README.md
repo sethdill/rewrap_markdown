@@ -20,9 +20,7 @@
 
 **Wrap prose without mangling Markdown.**
 
-Rewrap Markdown is a command-line filter and BBEdit integration that makes
-long Markdown readable in source form while preserving the structure that
-makes it Markdown.
+Rewrap Markdown is a command-line filter and BBEdit integration that makes long Markdown readable in source form while preserving the structure that makes it Markdown.
 
 Give it this unwrapped task inside a blockquote:
 
@@ -47,13 +45,11 @@ and at `80` columns it produces:
 >   wraps neatly.
 ```
 
-The prose is tidy. The quote, task marker, hanging indentation, link, and code
-span still mean exactly what they meant before.
+The prose is tidy. The quote, task marker, hanging indentation, link, and code span still mean exactly what they meant before.
 
 ## Why Use It?
 
-A generic line wrapper sees words and spaces. Rewrap Markdown also sees lists,
-blockquotes, links, code, tables, alerts, comments, and hard line breaks.
+A generic line wrapper sees words and spaces. Rewrap Markdown also sees lists, blockquotes, links, code, tables, alerts, comments, and hard line breaks.
 
 That makes it useful when you:
 
@@ -64,8 +60,7 @@ That makes it useful when you:
 
 ## Markdown It Understands
 
-Rewrap Markdown handles ordinary paragraphs plus the places where wrapping is
-easy to get subtly wrong:
+Rewrap Markdown handles ordinary paragraphs plus the places where wrapping is easy to get subtly wrong:
 
 - ordered, unordered, nested, and task lists;
 - blockquotes and quoted lists;
@@ -74,12 +69,9 @@ easy to get subtly wrong:
 - inline links, images, autolinks, bare URLs, and code spans;
 - backslash and two-space hard line breaks.
 
-It leaves structural content alone, including headings, reference definitions,
-tables, fenced and indented code, HTML blocks, comments, and thematic breaks.
+It leaves structural content alone, including headings, reference definitions, tables, fenced and indented code, HTML blocks, comments, and thematic breaks.
 
-For a deliberately excessive tour, compare the
-[unwrapped demo document](Samples/gfm_supported_unwrapped.md) with the
-[wrapped demo document](Samples/gfm_supported_wrapped.md).
+For a deliberately excessive tour, compare the [unwrapped demo document](Samples/gfm_supported_unwrapped.md) with the [wrapped demo document](Samples/gfm_supported_wrapped.md).
 
 ## Install
 
@@ -89,44 +81,30 @@ For a deliberately excessive tour, compare the
 brew install sethdill/tap/rewrap-markdown
 ```
 
-The [public tap](https://github.com/sethdill/homebrew-tap) installs the CLI from
-checksummed source on macOS and Linux. For BBEdit integration, use the macOS
-installer below.
+The [public tap](https://github.com/sethdill/homebrew-tap) installs the CLI from checksummed source on macOS and Linux. For BBEdit integration, use the macOS installer below.
 
-The command-line tool supports macOS 12 or later and Linux. BBEdit integration
-and the `.pkg` installer require macOS; the integrations have been tested with
-BBEdit 15.5.5. Linux release binaries are available starting with 0.3.
+The command-line tool supports macOS 12 or later and Linux. BBEdit integration and the `.pkg` installer require macOS; the integrations have been tested with BBEdit 15.5.5. Linux release binaries are available starting with 0.3.
 
-The 0.5 branch is in development. The download examples below use the
-published 0.4 release.
+The 0.5 branch is in development. The download examples below use the published 0.4 release.
 
 ### macOS Installer
 
-The easiest installation is the universal macOS package from the
-[latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
-Its Customize screen offers:
+The easiest installation is the universal macOS package from the [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest). Its Customize screen offers:
 
 - **Markdown-aware Hard Wrap for BBEdit**, selected by default;
 - **BBEdit Text Filter**, optional;
 - **Command-line link** at `/usr/local/bin/rewrap-markdown`, optional.
 
-The installer is unsigned. After trying to open it, macOS may block it
-because it cannot verify the developer. Open **System Settings > Privacy &
-Security**, scroll to Security, click **Open Anyway** for the Rewrap Markdown
-installer, authenticate, and confirm **Open**. Only bypass this warning for an
-installer downloaded from this project's GitHub release.
+The installer is unsigned. After trying to open it, macOS may block it because it cannot verify the developer. Open **System Settings > Privacy & Security**, scroll to Security, click **Open Anyway** for the Rewrap Markdown installer, authenticate, and confirm **Open**. Only bypass this warning for an installer downloaded from this project's GitHub release.
 
-Each release includes a `.sha256` file. Set `VERSION` to the version you
-downloaded and run this in the directory containing both files:
+Each release includes a `.sha256` file. Set `VERSION` to the version you downloaded and run this in the directory containing both files:
 
 ```sh
 VERSION=0.4
 shasum -a 256 -c "rewrap-markdown-${VERSION}-unsigned.pkg.sha256"
 ```
 
-Upgrades retain the remembered Hard Wrap settings and automatically update any
-optional components that were installed previously. To remove all package
-components and their receipts:
+Upgrades retain the remembered Hard Wrap settings and automatically update any optional components that were installed previously. To remove all package components and their receipts:
 
 ```sh
 sudo "/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
@@ -134,9 +112,7 @@ sudo "/Library/Application Support/Rewrap Markdown/uninstall-rewrap-markdown"
 
 ### macOS Release Binary
 
-Download the binary for your Mac from the
-[latest release](https://github.com/sethdill/rewrap_markdown/releases/latest).
-Set `VERSION` to the version you downloaded:
+Download the binary for your Mac from the [latest release](https://github.com/sethdill/rewrap_markdown/releases/latest). Set `VERSION` to the version you downloaded:
 
 ```sh
 VERSION=0.4
@@ -147,10 +123,7 @@ install -m 755 \
   "$HOME/.local/bin/rewrap-markdown"
 ```
 
-`~/.local/bin` is the default installation directory because it is stable,
-per-user, and does not require administrator access. If it is not already on
-your shell path, add this to `~/.zprofile` when using Zsh or
-`~/.bash_profile` when using Bash:
+`~/.local/bin` is the default installation directory because it is stable, per-user, and does not require administrator access. If it is not already on your shell path, add this to `~/.zprofile` when using Zsh or `~/.bash_profile` when using Bash:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -158,10 +131,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ### Linux Release Binary
 
-From the [releases page](https://github.com/sethdill/rewrap_markdown/releases),
-choose v0.3 or later and download both
-`rewrap-markdown-VERSION-linux-x86_64` (Intel/AMD) or
-`rewrap-markdown-VERSION-linux-aarch64` (ARM64), and its `.sha256` file.
+From the [releases page](https://github.com/sethdill/rewrap_markdown/releases), choose v0.3 or later and download both `rewrap-markdown-VERSION-linux-x86_64` (Intel/AMD) or `rewrap-markdown-VERSION-linux-aarch64` (ARM64), and its `.sha256` file.
 
 In the directory containing the downloaded files:
 
@@ -176,14 +146,7 @@ export PATH="$HOME/.local/bin:$PATH"
 rewrap-markdown --version
 ```
 
-Keep the PATH export in your shell's startup file (for example `~/.bashrc`).
-The binaries use Swift's official Static Linux SDK and need no installed Swift
-runtime. CI executes both architectures natively with Ubuntu 22.04 and 24.04,
-Debian 12, and Alpine 3.22 userlands, checking wrapping, unwrapping, commit
-messages, and the Git hook. Native Ubuntu VM jobs also verify the README
-installation steps, invocation through `PATH`, and removal on both architectures.
-Other distributions and older kernels have not been
-validated; these tests do not establish compatibility with every Linux system.
+Keep the PATH export in your shell's startup file (for example `~/.bashrc`). The binaries use Swift's official Static Linux SDK and need no installed Swift runtime. CI executes both architectures natively with Ubuntu 22.04 and 24.04, Debian 12, and Alpine 3.22 userlands, checking wrapping, unwrapping, commit messages, and the Git hook. Native Ubuntu VM jobs also verify the README installation steps, invocation through `PATH`, and removal on both architectures. Other distributions and older kernels have not been validated; these tests do not establish compatibility with every Linux system.
 
 ### Python on Linux
 
@@ -195,15 +158,11 @@ python3 Reference/rewrap_markdown.py --unwrap < draft.md > draft-unwrapped.md
 python3 Reference/rewrap_markdown.py --commit < message.txt > message-wrapped.txt
 ```
 
-The release's `rewrap-markdown-VERSION.py` can be installed as
-`~/.local/bin/rewrap-markdown` with `install -m 755` to use the same command and
-Git hook as the Swift binary. Python compatibility cases run on Linux CI too.
+The release's `rewrap-markdown-VERSION.py` can be installed as `~/.local/bin/rewrap-markdown` with `install -m 755` to use the same command and Git hook as the Swift binary. Python compatibility cases run on Linux CI too.
 
 ### Build From Source
 
-Building on macOS requires Swift 5.9 or newer. Linux CI uses Swift 6.2.1;
-install a matching Linux toolchain from [Swift.org](https://www.swift.org/install/)
-and ensure Python 3.10+, Git, and Make are available for the test suite:
+Building on macOS requires Swift 5.9 or newer. Linux CI uses Swift 6.2.1; install a matching Linux toolchain from [Swift.org](https://www.swift.org/install/) and ensure Python 3.10+, Git, and Make are available for the test suite:
 
 ```sh
 git clone https://github.com/sethdill/rewrap_markdown.git
@@ -211,28 +170,19 @@ cd rewrap_markdown
 make install-cli
 ```
 
-`make install-cli` builds a release executable and copies it to
-`~/.local/bin/rewrap-markdown`. It does not require BBEdit.
+`make install-cli` builds a release executable and copies it to `~/.local/bin/rewrap-markdown`. It does not require BBEdit.
 
 #### BBEdit Integrations (macOS Only)
 
-For BBEdit, use `make install` instead. It installs the executable and the
-standard text filter. The filter points to the installed executable, so it
-keeps working if the source checkout is moved or deleted.
+For BBEdit, use `make install` instead. It installs the executable and the standard text filter. The filter points to the installed executable, so it keeps working if the source checkout is moved or deleted.
 
-The filter uses a width of 70 by default. Choose another width when installing
-it with:
+The filter uses a width of 70 by default. Choose another width when installing it with:
 
 ```sh
 FILTER_WIDTH=80 make install
 ```
 
-Install the Markdown-aware Hard Wrap integration with
-`make install-hard-wrap`, or install both BBEdit integrations with
-`make install-all`. Building the Hard Wrap dialog from source requires Xcode's
-Interface Builder compiler (`ibtool`). Remove Hard Wrap with
-`make uninstall-hard-wrap`, or remove both integrations and the executable
-with `make uninstall-all`.
+Install the Markdown-aware Hard Wrap integration with `make install-hard-wrap`, or install both BBEdit integrations with `make install-all`. Building the Hard Wrap dialog from source requires Xcode's Interface Builder compiler (`ibtool`). Remove Hard Wrap with `make uninstall-hard-wrap`, or remove both integrations and the executable with `make uninstall-all`.
 
 Override the executable directory or BBEdit support folder when needed:
 
@@ -241,16 +191,13 @@ INSTALL_BIN_DIR=/usr/local/bin make install-cli
 BBEDIT_FILTERS_DIR="/path/to/Text Filters" make install
 ```
 
-Use a directory your account can write to. Running the entire target with
-`sudo` is not recommended because the BBEdit integration is installed for the
-current user.
+Use a directory your account can write to. Running the entire target with `sudo` is not recommended because the BBEdit integration is installed for the current user.
 
 ## Command Line
 
 ### Wrap Markdown
 
-Pass one Markdown file path to wrap it at 80 columns. By default the
-formatter writes the result to stdout. Omitting the path reads stdin.
+Pass one Markdown file path to wrap it at 80 columns. By default the formatter writes the result to stdout. Omitting the path reads stdin.
 
 ```sh
 rewrap-markdown 80 draft.md
@@ -258,12 +205,7 @@ rewrap-markdown 80 draft.md --output draft-wrapped.md
 rewrap-markdown 80 --in-place draft.md
 ```
 
-`--output PATH` writes a separate file. Use `--in-place` to update the input
-file. Both options write a temporary file beside the destination and replace
-it after the write succeeds. Replacement keeps the existing file's read, write,
-and execute permissions. New output files are private to the current user.
-`--in-place` skips replacement when the bytes match. Existing destinations
-must be regular files. For paths that begin with a dash, use a `./` prefix.
+`--output PATH` writes a separate file. Use `--in-place` to update the input file. Both options write a temporary file beside the destination and replace it after the write succeeds. Replacement keeps the existing file's read, write, and execute permissions. New output files are private to the current user. `--in-place` skips replacement when the bytes match. Existing destinations must be regular files. For paths that begin with a dash, use a `./` prefix.
 
 Or rewrap text on the macOS clipboard:
 
@@ -280,17 +222,11 @@ rewrap-markdown --check 80 < draft.md
 python3 Reference/rewrap_markdown.py --check 80 < draft.md
 ```
 
-Both CLIs compare the formatted UTF-8 bytes with the original input bytes
-and leave stdout empty. Exit status `0` means the bytes match, `1` means
-formatting would change them, and `2` indicates an argument or input error
-reported on stderr. The check uses the requested width and supports
-`--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`. Use
-`--check` without `--output` or `--in-place`.
+Both CLIs compare the formatted UTF-8 bytes with the original input bytes and leave stdout empty. Exit status `0` means the bytes match, `1` means formatting would change them, and `2` indicates an argument or input error reported on stderr. The check uses the requested width and supports `--unwrap`, width `0`, `--repair`, `--commit`, and `--indent`. Use `--check` without `--output` or `--in-place`.
 
 ### Preview Formatting Changes
 
-Before rewrapping a document you're editing, use `diff -u` to see which lines
-the formatter would change. This leaves `draft.md` untouched.
+Before rewrapping a document you're editing, use `diff -u` to see which lines the formatter would change. This leaves `draft.md` untouched.
 
 ```sh
 if preview=$(mktemp "${TMPDIR:-/tmp}/rewrap-preview.XXXXXX"); then
@@ -299,14 +235,11 @@ if preview=$(mktemp "${TMPDIR:-/tmp}/rewrap-preview.XXXXXX"); then
 fi
 ```
 
-Lines prefixed with `-` come from the original, and lines prefixed with `+`
-show the proposed replacement. No diff output means the files match.
+Lines prefixed with `-` come from the original, and lines prefixed with `+` show the proposed replacement. No diff output means the files match.
 
 ### Rewrap Specific Lines
 
-Use repeatable `--lines START:END` arguments to select lines from the input.
-Line numbers are 1-based and inclusive. Every range uses the original input's
-line numbers, even if rewrapping an earlier block changes its length.
+Use repeatable `--lines START:END` arguments to select lines from the input. Line numbers are 1-based and inclusive. Every range uses the original input's line numbers, even if rewrapping an earlier block changes its length.
 
 ```sh
 rewrap-markdown --lines 8:12 --lines 24:24 80 < draft.md > draft-wrapped.md
@@ -314,85 +247,68 @@ rewrap-markdown --check --lines 8:12 80 < draft.md
 rewrap-markdown --lines 8:12 80 --in-place draft.md
 ```
 
-A range that touches prose selects the whole paragraph or the prose belonging to
-the same list item, with its enclosing list and quote context. Nested list items
-can be selected independently. A range can reach across fenced or indented code
-and other protected blocks to select prose on either side. Protected blocks and
-all bytes outside the selected prose are preserved, including line endings,
-trailing spaces, and the presence or absence of a final newline.
+A range that touches prose selects the whole paragraph or the prose belonging to the same list item, with its enclosing list and quote context. Nested list items can be selected independently. A range can reach across fenced or indented code and other protected blocks to select prose on either side. Protected blocks and all bytes outside the selected prose are preserved, including line endings, trailing spaces, and the presence or absence of a final newline.
 
-Both CLIs support width, `--unwrap`, `--repair`, and `--indent` with ranges.
-`--check` reports whether the selected formatting would change the input.
-Malformed, reversed, or out-of-bounds ranges exit with status `2` and a
-diagnostic on stderr. `--lines` is incompatible with `--commit`.
+Both CLIs support width, `--unwrap`, `--repair`, and `--indent` with ranges. `--check` reports whether the selected formatting would change the input. Malformed, reversed, or out-of-bounds ranges exit with status `2` and a diagnostic on stderr. `--lines` is incompatible with `--commit`.
+
+#### Wrapping Indented Prose
+
+If you pass a nested list item by itself, four or more columns of leading indentation can make it look like an indented code block. This can happen with spaces or tabs, and the formatter leaves the item unchanged when wrapping or unwrapping.
+
+To work around this:
+- In BBEdit, include the enclosing list in the selection
+- On the command line, pass the full document and use `--lines` to target the nested item while keeping its list context.
 
 ### Unwrap Markdown
 
-Join each paragraph and list item onto one line before pasting Markdown into a
-GitHub comment, Jira, Slack, or a web form:
+Join each paragraph and list item onto one line before pasting Markdown into a GitHub comment, Jira, Slack, or a web form:
 
 ```sh
 rewrap-markdown --unwrap < draft.md > draft-unwrapped.md
 ```
 
-Width `0` is equivalent to `--unwrap`. Markdown structure, protected blocks,
-and intentional hard line breaks are preserved.
+Width `0` is equivalent to `--unwrap`. Markdown structure, protected blocks, and intentional hard line breaks are preserved.
 
 ### Prose Punctuation
 
-Both implementations join prose commas, periods, question marks, and
-exclamation marks to the preceding word or inline span in every wrap mode.
-Inverted question and exclamation marks join the following word. Colons and
-semicolons stay with the preceding text when wrapping, with their space
-preserved. Ellipses and supported non-ASCII sentence marks also stay with
-the preceding text and retain their spacing. Spaced parentheses, braces,
-and matched quotes stay with the adjacent text. Longer passages can wrap
-inside those delimiters. An inseparable group may exceed the requested
-width. Wrapping also keeps inline markers with preceding prose when starting
-a new line with them could create a Markdown block. Nonbreaking spaces, thin
-spaces before punctuation, and hard line breaks are preserved.
+Python and Swift use the same punctuation rules.
+
+- Prose commas, periods, question marks, and exclamation points join the preceding word or inline span in every wrap mode.
+- Inverted question marks (¿) and exclamation points (¡) join the following word.
+- Colons and semicolons stay with the preceding text when wrapping and retain their spacing.
+- Ellipses and supported non-ASCII sentence marks stay with the preceding text and retain their spacing.
+- Spaced parentheses, braces, and matched quotes stay with adjacent text. Longer passages can wrap inside those delimiters.
+- An inseparable group may exceed the requested width.
+- Inline markers stay with preceding prose when starting a new line with them could create a Markdown block.
+- Nonbreaking spaces, thin spaces before punctuation, and hard line breaks are preserved.
 
 ### Repair Spacing Around Inline Code (Opt-in)
 
-Use `rewrap-markdown --repair 70` to remove spacing between an inline code span
-and a matched closing parenthesis. For example, ``(such as `code` )`` becomes
-``(such as `code`)``. When the span is the entire parenthetical, repair also
-removes spacing after the opener, so ``( `code` )`` becomes ``(`code`)``.
-These repairs apply to spaces, tabs, and spacing joined from soft line breaks.
-`( ordinary words )` and ``( `code` plus prose )`` retain their spacing.
+Use `rewrap-markdown --repair 70` to remove extra spacing between inline code spans and their matching closing parentheses throughout the text being rewrapped. This applies to the whole document by default and to the prose blocks selected by `--lines` when you specify a range. For example, ``(such as `code` )`` becomes ``(such as `code`)``.
 
-Code contents, escapes, links, URLs, and protected blocks are opaque to repair.
-Intentional hard breaks remain boundaries.
+When the span is the entire parenthetical, repair also removes spacing after the opener, so ``( `code` )`` becomes ``(`code`)``.
 
-`--repair` works with `--unwrap` and width `0` (repair before joining), all
-`--indent=preserve|tabs|spaces` styles, and `--commit` (body only; subject,
-comments, and trailers stay unchanged). `--repair` also applies the code
-spacing rule to matched prose braces. Interior quote spacing is preserved.
-Square brackets remain protected as potential Markdown references, and
-recognized template delimiters are treated as syntax.
+These repairs apply to spaces, tabs, and spacing joined from soft line breaks. `( ordinary words )` and ``( `code` plus prose )`` retain their spacing.
+
+Code contents, escapes, links, URLs, and protected blocks are opaque to repair. Intentional hard breaks remain boundaries.
+
+`--repair` works with `--unwrap` and width `0` (repair before joining), all `--indent=preserve|tabs|spaces` styles, and `--commit` (body only; subject, comments, and trailers stay unchanged). `--repair` also applies the code spacing rule to matched prose braces. Interior quote spacing is preserved. Square brackets remain protected as potential Markdown references, and recognized template delimiters are treated as syntax.
 
 ### List Indentation
 
-Rewrapping preserves the indentation style of each list item by default.
-Tabbed lists and sublists can coexist with space-indented lists. Tabs advance
-to the next four-column stop for Markdown parsing and wrap measurement.
+Rewrapping preserves the indentation style of each list item by default. Tabbed lists and sublists can coexist with space-indented lists. Tabs advance to the next four-column stop for Markdown parsing and wrap measurement.
 
-Use `--indent=tabs` or `--indent=spaces` to convert list indentation
-explicitly. `--indent=preserve` selects the default behavior. These options
-also work with `--unwrap` and `--commit`.
+Use `--indent=tabs` or `--indent=spaces` to convert list indentation explicitly. `--indent=preserve` selects the default behavior. These options also work with `--unwrap` and `--commit`.
 
 ### Commit Messages
 
-Rewrap a commit message while leaving its subject line, `#` comment lines, and
-final Git trailer block unchanged:
+Rewrap a commit message while leaving its subject line, `#` comment lines, and final Git trailer block unchanged:
 
 ```sh
 rewrap-markdown --commit < message.txt > message-wrapped.txt
 ```
 
-Commit message bodies default to 72 columns. Supply a different width as a
-numeric argument, or use `--commit --unwrap` to join each body paragraph without
-changing the protected parts of the message.
+Commit message bodies default to 72 columns. Supply a different width as a numeric argument, or use `--commit --unwrap` to join each body paragraph without changing the protected parts of the message.
 
 To rewrap every commit message in a repository, install the included hook:
 
@@ -400,13 +316,9 @@ To rewrap every commit message in a repository, install the included hook:
 install -m 755 Distribution/Git/commit-msg .git/hooks/commit-msg
 ```
 
-For a downloaded release hook, use `rewrap-markdown-commit-msg` as the source
-path in the command above. Do not overwrite an existing hook without combining
-its behavior. The hook works on Linux and macOS.
+For a downloaded release hook, use `rewrap-markdown-commit-msg` as the source path in the command above. Do not overwrite an existing hook without combining its behavior. The hook works on Linux and macOS.
 
-The hook rewrites Git's message file only after `rewrap-markdown --commit`
-succeeds. Set `REWRAP_MARKDOWN` in the hook environment if the executable is not
-on Git's command path.
+The hook rewrites Git's message file only after `rewrap-markdown --commit` succeeds. Set `REWRAP_MARKDOWN` in the hook environment if the executable is not on Git's command path.
 
 The width is chosen in this order:
 
@@ -414,37 +326,25 @@ The width is chosen in this order:
 2. `MD_REWRAP_WIDTH` (environment variable)
 3. Default width of `70`, or `72` in commit message mode
 
-Use `rewrap-markdown --help` to see the available modes, or
-`rewrap-markdown --version` to print the version.
+Use `rewrap-markdown --help` to see the available modes, or `rewrap-markdown --version` to print the version.
 
 ## BBEdit
 
 Rewrap Markdown offers two BBEdit workflows.
 
+Both workflows (described below) measure width in UTF-16 code units to match BBEdit's column readout. To use the same measurement from the command line, pass `--width-unit=utf16`.
+
 ### Rewrap Markdown Text Filter
 
-The text filter adds **Text > Apply Text Filter > Rewrap Markdown**. It filters
-the selection, or the entire document when nothing is selected, at a configured
-width of 70 by default.
+The text filter adds **Text > Apply Text Filter > Rewrap Markdown**. It filters the selection, or the entire document when nothing is selected, at a configured width of 70 by default.
 
-To change the preferred width after installing the filter, hold the option key
-when you choose the filter, then edit the `WRAP_WIDTH` variable.
-
-BBEdit's Markdown-aware Hard Wrap and text filters measure width in UTF-16
-code units to match BBEdit's column readout. To use the same measurement from
-the command line, pass `--width-unit=utf16`.
+To change the preferred width after installing the filter, hold the option key when you choose the filter, then edit the `WRAP_WIDTH` variable.
 
 ### Markdown-Aware Hard Wrap
 
-The menu attachment takes over **Text > Hard Wrap…** for Markdown documents
-and rewraps the selection or the whole document. For other document types,
-BBEdit behaves normally.
+The menu attachment takes over **Text > Hard Wrap…** for Markdown documents and rewraps the selection or the whole document. For other document types, BBEdit behaves normally.
 
-Starting in 0.5, the dialog offers **Width**, **Unwrap**, **Repair**, and
-**Indentation**. Unwrap joins each paragraph and list item onto one line and
-keeps the previous width available. Repair applies the [opt-in spacing rules](#repair-spacing-around-inline-code-opt-in).
-Indentation preserves the existing list style by default. You can also choose
-spaces or tabs. The footer shows the version of the formatter BBEdit uses.
+Starting in 0.5, the dialog offers **Width**, **Unwrap**, **Repair**, and **Indentation**. Unwrap joins each paragraph and list item onto one line and keeps the previous width available. Repair applies the [opt-in spacing rules](#repair-spacing-around-inline-code-opt-in). Indentation preserves the existing list style by default. You can also choose spaces or tabs. The footer shows the version of the formatter BBEdit uses.
 
 Its modifiers mirror BBEdit's own menu behavior:
 
@@ -453,9 +353,7 @@ Its modifiers mirror BBEdit's own menu behavior:
 
 ## Other Editors
 
-The executable reads UTF-8 from standard input and writes UTF-8 to standard
-output, so it works with any editor that can filter selected text through a
-command.
+The executable reads UTF-8 from standard input and writes UTF-8 to standard output, so it works with any editor that can filter selected text through a command.
 
 Vim and Neovim can filter a visual selection:
 
@@ -469,8 +367,7 @@ Or the entire buffer:
 :%!rewrap-markdown 72
 ```
 
-In Emacs, `C-u M-| rewrap-markdown 72 RET` replaces the active region with the
-filtered output.
+In Emacs, `C-u M-| rewrap-markdown 72 RET` replaces the active region with the filtered output.
 
 ## Development
 
@@ -482,37 +379,24 @@ make test-smoke
 make dist
 ```
 
-`make dist` stages the native executable, Python script, and Git hook. On macOS
-it also includes the BBEdit assets. `make dist-cli` is the portable subset;
-`make install-cli` and `make uninstall-cli` work on both platforms. Installer
-and BBEdit targets explicitly require macOS.
+`make dist` stages the native executable, Python script, and Git hook. On macOS it also includes the BBEdit assets. `make dist-cli` is the portable subset; `make install-cli` and `make uninstall-cli` work on both platforms. Installer and BBEdit targets explicitly require macOS.
 
-For fully static Linux release builds, install the matching Swift 6.2.1
-open-source toolchain and official Static Linux SDK (Xcode's Swift toolchain
-cannot use that SDK), then run:
+For fully static Linux release builds, install the matching Swift 6.2.1 open-source toolchain and official Static Linux SDK (Xcode's Swift toolchain cannot use that SDK), then run:
 
 ```sh
 make dist-linux LINUX_ARCH=x86_64
 make dist-linux LINUX_ARCH=aarch64
 ```
 
-See [RELEASING.md](RELEASING.md) and `.github/workflows/linux-release.yml` for
-the pinned SDK URL/checksum and release validation. Native `make dist` builds
-use the host toolchain and are not the portable static release artifacts.
+See [RELEASING.md](RELEASING.md) and `.github/workflows/linux-release.yml` for the pinned SDK URL/checksum and release validation. Native `make dist` builds use the host toolchain and are not the portable static release artifacts.
 
-The wrapping engine lives in `RewrapMarkdownCore`, separate from the
-stdin/stdout executable.
+The wrapping engine lives in `RewrapMarkdownCore`, separate from the stdin/stdout executable.
 
-The Swift implementation was ported from a Python-based text filter by the same
-author. The test suite runs shared compatibility cases against both versions.
+The Swift implementation was ported from a Python-based text filter by the same author. The test suite runs shared compatibility cases against both versions.
 
-The Python script remains available at `Reference/rewrap_markdown.py` for
-comparison and experimentation; it is no longer the main installation path.
+The Python script remains available at `Reference/rewrap_markdown.py` for comparison and experimentation; it is no longer the main installation path.
 
-On macOS, running `--check` with a directory redirected to stdin (for example,
-using `< .`) exits with status `2` in the Swift CLI and status `1` in the
-Python reference CLI. CPython rejects directory input during startup, before
-the reference script can handle the error.
+On macOS, running `--check` with a directory redirected to stdin (for example, using `< .`) exits with status `2` in the Swift CLI and status `1` in the Python reference CLI. CPython rejects directory input during startup, before the reference script can handle the error.
 
 ## License
 
