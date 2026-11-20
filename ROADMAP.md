@@ -96,6 +96,10 @@ and the [tap maintenance notes](Packaging/homebrew/README.md).
 ### Check mode and pre-commit integration
 
 - [ ] Add `--diff` for review workflows.
+- [ ] Reject unrecognized arguments in all modes in both CLIs. Report the
+  unexpected argument on stderr and exit nonzero before reading stdin. When
+  someone passes a filename, suggest redirecting it with `< file.md` until
+  file arguments are supported.
 - [ ] Accept multiple file arguments and add safe in-place editing with `-i`.
 - [ ] Add a hook definition for the pre-commit framework.
 
